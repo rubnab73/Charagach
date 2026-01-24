@@ -13,7 +13,7 @@ struct ContentView: View {
             Image(systemName: "tree.fill")
                 .imageScale(.large)
                 .foregroundColor(.green)
-            Text("Hello, world!")
+            Text("Hello, World!")
         }
         .padding()
     }
