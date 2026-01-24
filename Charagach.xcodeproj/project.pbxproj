@@ -1,0 +1,582 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		22E152BD2F24DA8000EB92DC /* CharagachApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22E152BC2F24DA8000EB92DC /* CharagachApp.swift */; };
+		22E152BF2F24DA8000EB92DC /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22E152BE2F24DA8000EB92DC /* ContentView.swift */; };
+		22E152C12F24DA8200EB92DC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 22E152C02F24DA8200EB92DC /* Assets.xcassets */; };
+		22E152C42F24DA8200EB92DC /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 22E152C32F24DA8200EB92DC /* Preview Assets.xcassets */; };
+		22E152CE2F24DA8200EB92DC /* CharagachTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22E152CD2F24DA8200EB92DC /* CharagachTests.swift */; };
+		22E152D82F24DA8200EB92DC /* CharagachUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22E152D72F24DA8200EB92DC /* CharagachUITests.swift */; };
+		22E152DA2F24DA8200EB92DC /* CharagachUITestsLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22E152D92F24DA8200EB92DC /* CharagachUITestsLaunchTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		22E152CA2F24DA8200EB92DC /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 22E152B12F24DA8000EB92DC /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 22E152B82F24DA8000EB92DC;
+			remoteInfo = Charagach;
+		};
+		22E152D42F24DA8200EB92DC /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 22E152B12F24DA8000EB92DC /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 22E152B82F24DA8000EB92DC;
+			remoteInfo = Charagach;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		22E152B92F24DA8000EB92DC /* Charagach.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Charagach.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		22E152BC2F24DA8000EB92DC /* CharagachApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CharagachApp.swift; sourceTree = "<group>"; };
+		22E152BE2F24DA8000EB92DC /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		22E152C02F24DA8200EB92DC /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		22E152C32F24DA8200EB92DC /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
+		22E152C92F24DA8200EB92DC /* CharagachTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CharagachTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		22E152CD2F24DA8200EB92DC /* CharagachTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CharagachTests.swift; sourceTree = "<group>"; };
+		22E152D32F24DA8200EB92DC /* CharagachUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CharagachUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		22E152D72F24DA8200EB92DC /* CharagachUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CharagachUITests.swift; sourceTree = "<group>"; };
+		22E152D92F24DA8200EB92DC /* CharagachUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CharagachUITestsLaunchTests.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		22E152B62F24DA8000EB92DC /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		22E152C62F24DA8200EB92DC /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		22E152D02F24DA8200EB92DC /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		22E152B02F24DA8000EB92DC = {
+			isa = PBXGroup;
+			children = (
+				22E152BB2F24DA8000EB92DC /* Charagach */,
+				22E152CC2F24DA8200EB92DC /* CharagachTests */,
+				22E152D62F24DA8200EB92DC /* CharagachUITests */,
+				22E152BA2F24DA8000EB92DC /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		22E152BA2F24DA8000EB92DC /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				22E152B92F24DA8000EB92DC /* Charagach.app */,
+				22E152C92F24DA8200EB92DC /* CharagachTests.xctest */,
+				22E152D32F24DA8200EB92DC /* CharagachUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		22E152BB2F24DA8000EB92DC /* Charagach */ = {
+			isa = PBXGroup;
+			children = (
+				22E152BC2F24DA8000EB92DC /* CharagachApp.swift */,
+				22E152BE2F24DA8000EB92DC /* ContentView.swift */,
+				22E152C02F24DA8200EB92DC /* Assets.xcassets */,
+				22E152C22F24DA8200EB92DC /* Preview Content */,
+			);
+			path = Charagach;
+			sourceTree = "<group>";
+		};
+		22E152C22F24DA8200EB92DC /* Preview Content */ = {
+			isa = PBXGroup;
+			children = (
+				22E152C32F24DA8200EB92DC /* Preview Assets.xcassets */,
+			);
+			path = "Preview Content";
+			sourceTree = "<group>";
+		};
+		22E152CC2F24DA8200EB92DC /* CharagachTests */ = {
+			isa = PBXGroup;
+			children = (
+				22E152CD2F24DA8200EB92DC /* CharagachTests.swift */,
+			);
+			path = CharagachTests;
+			sourceTree = "<group>";
+		};
+		22E152D62F24DA8200EB92DC /* CharagachUITests */ = {
+			isa = PBXGroup;
+			children = (
+				22E152D72F24DA8200EB92DC /* CharagachUITests.swift */,
+				22E152D92F24DA8200EB92DC /* CharagachUITestsLaunchTests.swift */,
+			);
+			path = CharagachUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		22E152B82F24DA8000EB92DC /* Charagach */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 22E152DD2F24DA8200EB92DC /* Build configuration list for PBXNativeTarget "Charagach" */;
+			buildPhases = (
+				22E152B52F24DA8000EB92DC /* Sources */,
+				22E152B62F24DA8000EB92DC /* Frameworks */,
+				22E152B72F24DA8000EB92DC /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Charagach;
+			productName = Charagach;
+			productReference = 22E152B92F24DA8000EB92DC /* Charagach.app */;
+			productType = "com.apple.product-type.application";
+		};
+		22E152C82F24DA8200EB92DC /* CharagachTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 22E152E02F24DA8200EB92DC /* Build configuration list for PBXNativeTarget "CharagachTests" */;
+			buildPhases = (
+				22E152C52F24DA8200EB92DC /* Sources */,
+				22E152C62F24DA8200EB92DC /* Frameworks */,
+				22E152C72F24DA8200EB92DC /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				22E152CB2F24DA8200EB92DC /* PBXTargetDependency */,
+			);
+			name = CharagachTests;
+			productName = CharagachTests;
+			productReference = 22E152C92F24DA8200EB92DC /* CharagachTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		22E152D22F24DA8200EB92DC /* CharagachUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 22E152E32F24DA8200EB92DC /* Build configuration list for PBXNativeTarget "CharagachUITests" */;
+			buildPhases = (
+				22E152CF2F24DA8200EB92DC /* Sources */,
+				22E152D02F24DA8200EB92DC /* Frameworks */,
+				22E152D12F24DA8200EB92DC /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				22E152D52F24DA8200EB92DC /* PBXTargetDependency */,
+			);
+			name = CharagachUITests;
+			productName = CharagachUITests;
+			productReference = 22E152D32F24DA8200EB92DC /* CharagachUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		22E152B12F24DA8000EB92DC /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1430;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					22E152B82F24DA8000EB92DC = {
+						CreatedOnToolsVersion = 14.3;
+					};
+					22E152C82F24DA8200EB92DC = {
+						CreatedOnToolsVersion = 14.3;
+						TestTargetID = 22E152B82F24DA8000EB92DC;
+					};
+					22E152D22F24DA8200EB92DC = {
+						CreatedOnToolsVersion = 14.3;
+						TestTargetID = 22E152B82F24DA8000EB92DC;
+					};
+				};
+			};
+			buildConfigurationList = 22E152B42F24DA8000EB92DC /* Build configuration list for PBXProject "Charagach" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 22E152B02F24DA8000EB92DC;
+			productRefGroup = 22E152BA2F24DA8000EB92DC /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				22E152B82F24DA8000EB92DC /* Charagach */,
+				22E152C82F24DA8200EB92DC /* CharagachTests */,
+				22E152D22F24DA8200EB92DC /* CharagachUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		22E152B72F24DA8000EB92DC /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				22E152C42F24DA8200EB92DC /* Preview Assets.xcassets in Resources */,
+				22E152C12F24DA8200EB92DC /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		22E152C72F24DA8200EB92DC /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		22E152D12F24DA8200EB92DC /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		22E152B52F24DA8000EB92DC /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				22E152BF2F24DA8000EB92DC /* ContentView.swift in Sources */,
+				22E152BD2F24DA8000EB92DC /* CharagachApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		22E152C52F24DA8200EB92DC /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				22E152CE2F24DA8200EB92DC /* CharagachTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		22E152CF2F24DA8200EB92DC /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				22E152D82F24DA8200EB92DC /* CharagachUITests.swift in Sources */,
+				22E152DA2F24DA8200EB92DC /* CharagachUITestsLaunchTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		22E152CB2F24DA8200EB92DC /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 22E152B82F24DA8000EB92DC /* Charagach */;
+			targetProxy = 22E152CA2F24DA8200EB92DC /* PBXContainerItemProxy */;
+		};
+		22E152D52F24DA8200EB92DC /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 22E152B82F24DA8000EB92DC /* Charagach */;
+			targetProxy = 22E152D42F24DA8200EB92DC /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		22E152DB2F24DA8200EB92DC /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		22E152DC2F24DA8200EB92DC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		22E152DE2F24DA8200EB92DC /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"Charagach/Preview Content\"";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.charagach.Charagach;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		22E152DF2F24DA8200EB92DC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"Charagach/Preview Content\"";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.charagach.Charagach;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		22E152E12F24DA8200EB92DC /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.charagach.CharagachTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Charagach.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Charagach";
+			};
+			name = Debug;
+		};
+		22E152E22F24DA8200EB92DC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.charagach.CharagachTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Charagach.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Charagach";
+			};
+			name = Release;
+		};
+		22E152E42F24DA8200EB92DC /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.charagach.CharagachUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Charagach;
+			};
+			name = Debug;
+		};
+		22E152E52F24DA8200EB92DC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.charagach.CharagachUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Charagach;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		22E152B42F24DA8000EB92DC /* Build configuration list for PBXProject "Charagach" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				22E152DB2F24DA8200EB92DC /* Debug */,
+				22E152DC2F24DA8200EB92DC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		22E152DD2F24DA8200EB92DC /* Build configuration list for PBXNativeTarget "Charagach" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				22E152DE2F24DA8200EB92DC /* Debug */,
+				22E152DF2F24DA8200EB92DC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		22E152E02F24DA8200EB92DC /* Build configuration list for PBXNativeTarget "CharagachTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				22E152E12F24DA8200EB92DC /* Debug */,
+				22E152E22F24DA8200EB92DC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		22E152E32F24DA8200EB92DC /* Build configuration list for PBXNativeTarget "CharagachUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				22E152E42F24DA8200EB92DC /* Debug */,
+				22E152E52F24DA8200EB92DC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 22E152B12F24DA8000EB92DC /* Project object */;
+}
