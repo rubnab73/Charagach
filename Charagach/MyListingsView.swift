@@ -15,6 +15,7 @@ struct MyListingsView: View {
     @State private var listings: [PlantListing] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var editingListing: PlantListing?
 
     var body: some View {
         NavigationStack {
@@ -44,6 +45,9 @@ struct MyListingsView: View {
                         ForEach(listings) { listing in
                             MyListingRow(
                                 listing: listing,
+                                onEdit: {
+                                    editingListing = listing
+                                },
                                 onStatusChange: { status in
                                     Task { await updateStatus(listingID: listing.id, status: status) }
                                 },
@@ -76,6 +80,18 @@ struct MyListingsView: View {
                 Button("OK") { errorMessage = nil }
             } message: {
                 Text(errorMessage ?? "")
+            }
+            .sheet(item: $editingListing) { listing in
+                EditListingSheet(listing: listing) { input in
+                    Task {
+                        do {
+                            try await dataStore.updateListing(listingID: listing.id, input: input, session: authViewModel.session)
+                            await refresh()
+                        } catch {
+                            errorMessage = error.localizedDescription
+                        }
+                    }
+                }
             }
         }
     }
@@ -113,6 +129,7 @@ struct MyListingsView: View {
 
 private struct MyListingRow: View {
     let listing: PlantListing
+    let onEdit: () -> Void
     let onStatusChange: (String) -> Void
     let onDelete: () -> Void
 
@@ -155,6 +172,8 @@ private struct MyListingRow: View {
                 Spacer()
 
                 Menu {
+                    Button("Edit Post") { onEdit() }
+                    Divider()
                     Button("Set Active") { onStatusChange("active") }
                     Button("Mark Sold") { onStatusChange("sold") }
                     Button("Archive") { onStatusChange("archived") }
@@ -178,5 +197,126 @@ private struct MyListingRow: View {
         } message: {
             Text("Are you sure you want to delete \(listing.name)?")
         }
+    }
+}
+
+private struct EditListingSheet: View {
+    let listing: PlantListing
+    let onSave: (UpdateListingInput) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var name = ""
+    @State private var species = ""
+    @State private var price = ""
+    @State private var city = ""
+    @State private var phone = ""
+    @State private var description = ""
+    @State private var category: PlantCategory = .indoor
+    @State private var condition: PlantCondition = .good
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Plant") {
+                    TextField("Plant name", text: $name)
+                    TextField("Species", text: $species)
+                    Picker("Category", selection: $category) {
+                        ForEach(PlantCategory.allCases.filter { $0 != .all }, id: \.self) { cat in
+                            Text(cat.rawValue).tag(cat)
+                        }
+                    }
+                    Picker("Condition", selection: $condition) {
+                        Text("Excellent").tag(PlantCondition.excellent)
+                        Text("Good").tag(PlantCondition.good)
+                        Text("Fair").tag(PlantCondition.fair)
+                    }
+                }
+
+                Section("Pricing & Contact") {
+                    TextField("Price (BDT)", text: $price)
+                        .keyboardType(.numberPad)
+                    TextField("City", text: $city)
+                    TextField("Phone Number", text: $phone)
+                        .keyboardType(.phonePad)
+                }
+
+                Section("Description") {
+                    TextField("Description", text: $description, axis: .vertical)
+                        .lineLimit(4...7)
+                }
+
+                if let errorMessage {
+                    Section {
+                        Text(errorMessage)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
+            .navigationTitle("Edit Listing")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Save") {
+                        save()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+            .onAppear {
+                name = listing.name
+                species = listing.species
+                price = String(Int(listing.price))
+                city = listing.location
+                phone = listing.phoneNumber ?? ""
+                description = listing.description
+                category = listing.category
+                condition = listing.condition
+            }
+        }
+    }
+
+    private func save() {
+        errorMessage = nil
+
+        guard !name.trimmingCharacters(in: .whitespaces).isEmpty else {
+            errorMessage = "Please enter plant name."
+            return
+        }
+        guard !species.trimmingCharacters(in: .whitespaces).isEmpty else {
+            errorMessage = "Please enter species."
+            return
+        }
+        guard let value = Double(price), value >= 0 else {
+            errorMessage = "Please enter a valid price."
+            return
+        }
+        guard !city.trimmingCharacters(in: .whitespaces).isEmpty else {
+            errorMessage = "Please enter city."
+            return
+        }
+        guard !phone.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            errorMessage = "Please enter phone number."
+            return
+        }
+
+        let input = UpdateListingInput(
+            name: name,
+            species: species,
+            price: value,
+            category: category,
+            condition: condition,
+            city: city,
+            phoneNumber: phone,
+            description: description
+        )
+
+        onSave(input)
+        dismiss()
     }
 }

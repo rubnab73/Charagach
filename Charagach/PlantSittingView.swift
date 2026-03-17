@@ -135,9 +135,9 @@ private struct BecomeSitterView: View {
     @State private var name = ""
     @State private var location = ""
     @State private var bio = ""
-    @State private var specialtiesInput = "Indoor, Succulents"
-    @State private var yearsExperience = "1"
-    @State private var pricePerDay = "500"
+    @State private var specialtiesInput = ""
+    @State private var yearsExperience = ""
+    @State private var pricePerDay = ""
     @State private var isAvailable = true
     @State private var errorMessage: String?
 

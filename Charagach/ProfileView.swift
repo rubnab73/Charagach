@@ -7,6 +7,8 @@
 
 import SwiftUI
 import Supabase
+import PhotosUI
+import UIKit
 
 // MARK: - Profile Tab
 
@@ -19,6 +21,8 @@ struct ProfileView: View {
     @State private var showMyListings = false
     @State private var showComingSoon = false
     @State private var comingSoonText = ""
+    @State private var showProfileError = false
+    @State private var profileErrorText = ""
 
     private var userEmail: String {
         if !viewModel.email.isEmpty { return viewModel.email }
@@ -48,20 +52,7 @@ struct ProfileView: View {
 
                     // ── Avatar & name ──────────────────────────────────
                     VStack(spacing: 10) {
-                        Circle()
-                            .fill(
-                                LinearGradient(
-                                    colors: [.green, .mint],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .frame(width: 90, height: 90)
-                            .overlay {
-                                Text(userInitial)
-                                    .font(.system(size: 38, weight: .bold))
-                                    .foregroundStyle(.white)
-                            }
+                        ProfileAvatarView(avatarURL: viewModel.avatarURL, fallbackInitial: userInitial)
                         Text(displayName)
                             .font(.headline)
                         if displayName != userEmail {
@@ -158,13 +149,18 @@ struct ProfileView: View {
         .sheet(isPresented: $showMyListings) {
             MyListingsView(authViewModel: authViewModel)
         }
-        .alert("Profile", isPresented: Binding(
-            get: { viewModel.errorMessage != nil },
-            set: { if !$0 { viewModel.errorMessage = nil } }
-        )) {
-            Button("OK") { viewModel.errorMessage = nil }
+        .onChange(of: viewModel.errorMessage) { newValue in
+            guard let message = newValue, !message.isEmpty else { return }
+            profileErrorText = message
+            showProfileError = true
+        }
+        .alert("Profile", isPresented: $showProfileError) {
+            Button("OK") {
+                profileErrorText = ""
+                viewModel.errorMessage = nil
+            }
         } message: {
-            Text(viewModel.errorMessage ?? "")
+            Text(profileErrorText)
         }
         .alert("Coming Soon", isPresented: $showComingSoon) {
             Button("OK") {}
@@ -266,6 +262,10 @@ private struct EditProfileView: View {
     @ObservedObject var viewModel: ProfileViewModel
     let session: Session?
     @Environment(\.dismiss) private var dismiss
+    @State private var selectedPhoto: PhotosPickerItem?
+    @State private var selectedAvatarData: Data?
+    @State private var showSaveError = false
+    @State private var saveErrorText = ""
 
     var body: some View {
         NavigationStack {
@@ -278,12 +278,55 @@ private struct EditProfileView: View {
                 }
 
                 Section("Profile") {
-                    TextField("Avatar URL (optional)", text: $viewModel.avatarURL)
+                    HStack(spacing: 14) {
+                        EditableAvatarView(
+                            currentAvatarURL: viewModel.avatarURL,
+                            selectedAvatarData: selectedAvatarData,
+                            fallbackInitial: String((viewModel.fullName.isEmpty ? viewModel.email : viewModel.fullName).prefix(1)).uppercased()
+                        )
+
+                        VStack(alignment: .leading, spacing: 6) {
+                            PhotosPicker(
+                                selection: $selectedPhoto,
+                                matching: .images,
+                                photoLibrary: .shared()
+                            ) {
+                                Label("Choose Profile Picture", systemImage: "photo")
+                            }
+
+                            Text("JPG/PNG image")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                     Toggle("I also provide plant sitting", isOn: $viewModel.isCaregiver)
                 }
             }
             .navigationTitle("Edit Profile")
             .navigationBarTitleDisplayMode(.inline)
+            .overlay {
+                if viewModel.isLoading {
+                    ZStack {
+                        Color.black.opacity(0.08).ignoresSafeArea()
+                        ProgressView("Saving...")
+                            .padding(16)
+                            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    }
+                }
+            }
+            .onChange(of: selectedPhoto) { newItem in
+                guard let newItem else { return }
+                Task {
+                    if let data = try? await newItem.loadTransferable(type: Data.self) {
+                        selectedAvatarData = data
+                    }
+                }
+            }
+            .onChange(of: viewModel.errorMessage) { message in
+                guard let message, !message.isEmpty else { return }
+                saveErrorText = message
+                showSaveError = true
+            }
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") { dismiss() }
@@ -291,13 +334,105 @@ private struct EditProfileView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Save") {
                         Task {
-                            await viewModel.save(session: session)
+                            await viewModel.save(session: session, avatarImageData: selectedAvatarData)
                             if viewModel.errorMessage == nil { dismiss() }
                         }
                     }
                     .fontWeight(.semibold)
+                    .disabled(viewModel.isLoading)
                 }
             }
+            .alert("Could not save profile", isPresented: $showSaveError) {
+                Button("OK", role: .cancel) {
+                    saveErrorText = ""
+                    viewModel.errorMessage = nil
+                }
+            } message: {
+                Text(saveErrorText)
+            }
         }
+    }
+}
+
+private struct ProfileAvatarView: View {
+    let avatarURL: String
+    let fallbackInitial: String
+
+    var body: some View {
+        if let url = URL(string: avatarURL), !avatarURL.isEmpty {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                default:
+                    avatarFallback
+                }
+            }
+            .frame(width: 90, height: 90)
+            .clipShape(Circle())
+        } else {
+            avatarFallback
+        }
+    }
+
+    private var avatarFallback: some View {
+        Circle()
+            .fill(
+                LinearGradient(
+                    colors: [.green, .mint],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .frame(width: 90, height: 90)
+            .overlay {
+                Text(fallbackInitial)
+                    .font(.system(size: 38, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+    }
+}
+
+private struct EditableAvatarView: View {
+    let currentAvatarURL: String
+    let selectedAvatarData: Data?
+    let fallbackInitial: String
+
+    var body: some View {
+        Group {
+            if let selectedAvatarData, let image = UIImage(data: selectedAvatarData) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else if let url = URL(string: currentAvatarURL), !currentAvatarURL.isEmpty {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    default:
+                        fallback
+                    }
+                }
+            } else {
+                fallback
+            }
+        }
+        .frame(width: 64, height: 64)
+        .clipShape(Circle())
+        .overlay(Circle().stroke(.green.opacity(0.25), lineWidth: 1))
+    }
+
+    private var fallback: some View {
+        Circle()
+            .fill(.green.opacity(0.15))
+            .overlay {
+                Text(fallbackInitial)
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(.green)
+            }
     }
 }

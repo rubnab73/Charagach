@@ -19,6 +19,7 @@ struct PlantListing: Identifiable {
     let sellerName: String
     let location: String
     let description: String
+    let phoneNumber: String?
     let iconName: String
     let iconColor: Color
     let postedDaysAgo: Int
@@ -34,6 +35,7 @@ struct PlantListing: Identifiable {
         sellerName: String,
         location: String,
         description: String,
+        phoneNumber: String? = nil,
         iconName: String,
         iconColor: Color,
         postedDaysAgo: Int,
@@ -48,6 +50,7 @@ struct PlantListing: Identifiable {
         self.sellerName = sellerName
         self.location = location
         self.description = description
+        self.phoneNumber = phoneNumber
         self.iconName = iconName
         self.iconColor = iconColor
         self.postedDaysAgo = postedDaysAgo

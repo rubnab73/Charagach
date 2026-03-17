@@ -120,6 +120,7 @@ private struct AddListingView: View {
     @State private var species = ""
     @State private var price = ""
     @State private var city = ""
+    @State private var phoneNumber = ""
     @State private var description = ""
     @State private var category: PlantCategory = .indoor
     @State private var condition: PlantCondition = .good
@@ -149,6 +150,8 @@ private struct AddListingView: View {
                     TextField("Price (BDT)", text: $price)
                         .keyboardType(.numberPad)
                     TextField("City", text: $city)
+                    TextField("Phone Number", text: $phoneNumber)
+                        .keyboardType(.phonePad)
                 }
 
                 Section("Description") {
@@ -199,6 +202,10 @@ private struct AddListingView: View {
             errorMessage = "Please enter city."
             return
         }
+        guard !phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            errorMessage = "Please enter your phone number."
+            return
+        }
 
         let payload = NewListingInput(
             name: name,
@@ -207,6 +214,7 @@ private struct AddListingView: View {
             category: category,
             condition: condition,
             city: city,
+            phoneNumber: phoneNumber,
             description: description
         )
 
@@ -254,6 +262,22 @@ struct ListingCard: View {
                 Image(systemName: listing.iconName)
                     .font(.system(size: 46))
                     .foregroundStyle(listing.iconColor)
+
+                if listing.status.lowercased() == "sold" {
+                    VStack {
+                        HStack {
+                            Text("SOLD")
+                                .font(.caption2.bold())
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(.red, in: Capsule())
+                                .foregroundStyle(.white)
+                            Spacer()
+                        }
+                        Spacer()
+                    }
+                    .padding(8)
+                }
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -273,6 +297,13 @@ struct ListingCard: View {
                     ConditionBadge(condition: listing.condition)
                 }
                 .padding(.top, 2)
+
+                if listing.status.lowercased() == "sold" {
+                    Text("Sold")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.red)
+                }
+
                 HStack(spacing: 3) {
                     Image(systemName: "mappin")
                         .font(.caption2)
@@ -338,6 +369,9 @@ struct PlantDetailView: View {
                     HStack {
                         TagView(text: listing.category.rawValue, color: .green)
                         TagView(text: listing.condition.rawValue, color: conditionColor)
+                        if listing.status.lowercased() == "sold" {
+                            TagView(text: "Sold", color: .red)
+                        }
                         Spacer()
                         HStack(spacing: 3) {
                             Image(systemName: "clock")
@@ -387,6 +421,15 @@ struct PlantDetailView: View {
                                         .font(.caption)
                                 }
                                 .foregroundStyle(.secondary)
+                                if let phone = listing.phoneNumber, !phone.isEmpty {
+                                    HStack(spacing: 3) {
+                                        Image(systemName: "phone.fill")
+                                            .font(.caption)
+                                        Text(phone)
+                                            .font(.caption)
+                                    }
+                                    .foregroundStyle(.secondary)
+                                }
                             }
                         }
                     }

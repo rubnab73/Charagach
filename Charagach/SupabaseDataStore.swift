@@ -15,6 +15,18 @@ struct NewListingInput {
     let category: PlantCategory
     let condition: PlantCondition
     let city: String
+    let phoneNumber: String
+    let description: String
+}
+
+struct UpdateListingInput {
+    let name: String
+    let species: String
+    let price: Double
+    let category: PlantCategory
+    let condition: PlantCondition
+    let city: String
+    let phoneNumber: String
     let description: String
 }
 
@@ -63,6 +75,7 @@ final class SupabaseDataStore: ObservableObject {
                     sellerName: nameByID[row.sellerId] ?? "Seller",
                     location: row.city ?? "Unknown",
                     description: row.description ?? "",
+                    phoneNumber: row.phoneNumber,
                     iconName: Self.iconName(for: row.category),
                     iconColor: Self.iconColor(for: row.category),
                     postedDaysAgo: Self.daysAgo(from: row.createdAt),
@@ -92,6 +105,7 @@ final class SupabaseDataStore: ObservableObject {
             condition: input.condition.rawValue,
             description: input.description,
             city: input.city,
+            phoneNumber: input.phoneNumber,
             status: "active"
         )
 
@@ -129,12 +143,34 @@ final class SupabaseDataStore: ObservableObject {
                 sellerName: "You",
                 location: row.city ?? "Unknown",
                 description: row.description ?? "",
+                phoneNumber: row.phoneNumber,
                 iconName: Self.iconName(for: row.category),
                 iconColor: Self.iconColor(for: row.category),
                 postedDaysAgo: Self.daysAgo(from: row.createdAt),
                 status: row.status
             )
         }
+    }
+
+    func updateListing(listingID: UUID, input: UpdateListingInput, session: Session?) async throws {
+        guard session != nil else { throw DataStoreError.notAuthenticated }
+
+        let payload = DBListingEditUpdate(
+            title: input.name,
+            species: input.species,
+            price: input.price,
+            category: input.category.rawValue,
+            condition: input.condition.rawValue,
+            city: input.city,
+            phoneNumber: input.phoneNumber,
+            description: input.description
+        )
+
+        _ = try await supabase.database
+            .from("plant_listings")
+            .update(payload)
+            .eq("id", value: listingID.uuidString)
+            .execute()
     }
 
     func updateListingStatus(listingID: UUID, status: String, session: Session?) async throws {
@@ -357,6 +393,7 @@ private struct DBPlantListing: Decodable {
     let condition: String
     let description: String?
     let city: String?
+    let phoneNumber: String?
     let createdAt: String?
     let status: String
 
@@ -370,6 +407,7 @@ private struct DBPlantListing: Decodable {
         case condition
         case description
         case city
+        case phoneNumber = "phone_number"
         case createdAt = "created_at"
         case status
     }
@@ -385,6 +423,7 @@ private struct DBPlantListing: Decodable {
         condition = try container.decode(String.self, forKey: .condition)
         description = try container.decodeIfPresent(String.self, forKey: .description)
         city = try container.decodeIfPresent(String.self, forKey: .city)
+        phoneNumber = try container.decodeIfPresent(String.self, forKey: .phoneNumber)
         createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt)
         status = try container.decodeIfPresent(String.self, forKey: .status) ?? "active"
     }
@@ -399,6 +438,7 @@ private struct DBPlantListingInsert: Encodable {
     let condition: String
     let description: String
     let city: String
+    let phoneNumber: String
     let status: String
 
     enum CodingKeys: String, CodingKey {
@@ -410,7 +450,30 @@ private struct DBPlantListingInsert: Encodable {
         case condition
         case description
         case city
+        case phoneNumber = "phone_number"
         case status
+    }
+}
+
+private struct DBListingEditUpdate: Encodable {
+    let title: String
+    let species: String
+    let price: Double
+    let category: String
+    let condition: String
+    let city: String
+    let phoneNumber: String
+    let description: String
+
+    enum CodingKeys: String, CodingKey {
+        case title
+        case species
+        case price
+        case category
+        case condition
+        case city
+        case phoneNumber = "phone_number"
+        case description
     }
 }
 

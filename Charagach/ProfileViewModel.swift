@@ -6,7 +6,8 @@
 //
 
 import Foundation
-import Supabase
+@preconcurrency import Supabase
+import UIKit
 
 @MainActor
 final class ProfileViewModel: ObservableObject {
@@ -89,10 +90,17 @@ final class ProfileViewModel: ObservableObject {
         }
     }
 
-    func save(session: Session?) async {
-        guard let session else {
-            errorMessage = "Please sign in first."
-            return
+    func save(session: Session?, avatarImageData: Data? = nil) async {
+        let activeSession: Session
+        if let session {
+            activeSession = session
+        } else {
+            do {
+                activeSession = try await supabase.auth.session
+            } catch {
+                errorMessage = "Please sign in first."
+                return
+            }
         }
 
         let trimmedName = fullName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -107,22 +115,79 @@ final class ProfileViewModel: ObservableObject {
         successMessage = nil
 
         do {
-            let payload = DBProfileUpsert(
-                id: session.user.id,
-                email: session.user.email,
-                fullName: trimmedName,
-                city: city.trimmingCharacters(in: .whitespacesAndNewlines),
-                avatarURL: avatarURL.trimmingCharacters(in: .whitespacesAndNewlines),
-                isCaregiver: isCaregiver
-            )
+            var finalAvatarURL = avatarURL.trimmingCharacters(in: .whitespacesAndNewlines)
 
-            _ = try await supabase.database
+            if let avatarImageData {
+                do {
+                    finalAvatarURL = try await uploadAvatarImage(avatarImageData, userID: activeSession.user.id)
+                } catch {
+                    throw NSError(
+                        domain: "ProfileSave",
+                        code: 1001,
+                        userInfo: [NSLocalizedDescriptionKey: "Avatar upload failed: \(error.localizedDescription)"]
+                    )
+                }
+            }
+
+            let profileID = activeSession.user.id.uuidString
+            let decoder = JSONDecoder()
+
+            let existingResponse = try await supabase.database
                 .from("profiles")
-                .upsert(payload)
+                .select("id")
+                .eq("id", value: profileID)
+                .limit(1)
                 .execute()
+            let existingRows: [DBIdOnly] = try decodeArray(from: existingResponse.data, decoder: decoder)
 
+            if existingRows.isEmpty {
+                let insertPayload = DBProfileInsert(
+                    id: activeSession.user.id,
+                    email: activeSession.user.email,
+                    fullName: trimmedName,
+                    city: city.trimmingCharacters(in: .whitespacesAndNewlines),
+                    avatarURL: finalAvatarURL,
+                    isCaregiver: isCaregiver
+                )
+
+                do {
+                    _ = try await supabase.database
+                        .from("profiles")
+                        .insert(insertPayload)
+                        .execute()
+                } catch {
+                    throw NSError(
+                        domain: "ProfileSave",
+                        code: 1002,
+                        userInfo: [NSLocalizedDescriptionKey: "Profile insert failed (RLS): \(error.localizedDescription)"]
+                    )
+                }
+            } else {
+                let updatePayload = DBProfileUpdate(
+                    fullName: trimmedName,
+                    city: city.trimmingCharacters(in: .whitespacesAndNewlines),
+                    avatarURL: finalAvatarURL,
+                    isCaregiver: isCaregiver
+                )
+
+                do {
+                    _ = try await supabase.database
+                        .from("profiles")
+                        .update(updatePayload)
+                        .eq("id", value: profileID)
+                        .execute()
+                } catch {
+                    throw NSError(
+                        domain: "ProfileSave",
+                        code: 1003,
+                        userInfo: [NSLocalizedDescriptionKey: "Profile update failed (RLS): \(error.localizedDescription)"]
+                    )
+                }
+            }
+
+            avatarURL = finalAvatarURL
             successMessage = "Profile updated successfully."
-            await load(session: session)
+            await load(session: activeSession)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -134,6 +199,34 @@ final class ProfileViewModel: ObservableObject {
             return []
         }
         return try decoder.decode([T].self, from: data)
+    }
+
+    private func uploadAvatarImage(_ data: Data, userID: UUID) async throws -> String {
+        let compressedData = compressedJPEGData(from: data)
+        let fileName = "profile-\(Int(Date().timeIntervalSince1970)).jpg"
+        let path = "\(userID.uuidString)/\(fileName)"
+
+        _ = try await supabase.storage
+            .from("avatars")
+            .upload(
+                path: path,
+                file: compressedData
+            )
+
+        let publicURL = try supabase.storage
+            .from("avatars")
+            .getPublicURL(path: path)
+
+        return publicURL.absoluteString
+    }
+
+    private func compressedJPEGData(from data: Data) -> Data {
+        guard let image = UIImage(data: data),
+              let jpeg = image.jpegData(compressionQuality: 0.8)
+        else {
+            return data
+        }
+        return jpeg
     }
 }
 
@@ -163,7 +256,11 @@ private struct DBCaregiverReview: Decodable {
     }
 }
 
-private struct DBProfileUpsert: Encodable {
+private struct DBIdOnly: Decodable {
+    let id: UUID
+}
+
+private struct DBProfileInsert: Encodable {
     let id: UUID
     let email: String?
     let fullName: String
@@ -174,6 +271,20 @@ private struct DBProfileUpsert: Encodable {
     enum CodingKeys: String, CodingKey {
         case id
         case email
+        case fullName = "full_name"
+        case city
+        case avatarURL = "avatar_url"
+        case isCaregiver = "is_caregiver"
+    }
+}
+
+private struct DBProfileUpdate: Encodable {
+    let fullName: String
+    let city: String
+    let avatarURL: String
+    let isCaregiver: Bool
+
+    enum CodingKeys: String, CodingKey {
         case fullName = "full_name"
         case city
         case avatarURL = "avatar_url"
