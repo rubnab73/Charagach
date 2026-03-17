@@ -22,6 +22,7 @@ struct PlantListing: Identifiable {
     let iconName: String
     let iconColor: Color
     let postedDaysAgo: Int
+    let status: String
 
     init(
         id: UUID = UUID(),
@@ -35,7 +36,8 @@ struct PlantListing: Identifiable {
         description: String,
         iconName: String,
         iconColor: Color,
-        postedDaysAgo: Int
+        postedDaysAgo: Int,
+        status: String = "active"
     ) {
         self.id = id
         self.name = name
@@ -49,6 +51,7 @@ struct PlantListing: Identifiable {
         self.iconName = iconName
         self.iconColor = iconColor
         self.postedDaysAgo = postedDaysAgo
+        self.status = status
     }
 }
 

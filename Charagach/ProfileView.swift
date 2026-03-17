@@ -6,26 +6,32 @@
 //
 
 import SwiftUI
+import Supabase
 
 // MARK: - Profile Tab
 
 struct ProfileView: View {
     @ObservedObject var authViewModel: AuthViewModel
+    @StateObject private var viewModel = ProfileViewModel()
+
     @State private var showSignOutConfirm = false
+    @State private var showEditProfile = false
+    @State private var showMyListings = false
+    @State private var showComingSoon = false
+    @State private var comingSoonText = ""
 
     private var userEmail: String {
-        authViewModel.session?.user.email ?? "No email"
+        if !viewModel.email.isEmpty { return viewModel.email }
+        return authViewModel.session?.user.email ?? "No email"
     }
 
     private var userInitial: String {
-        String((authViewModel.session?.user.email?.prefix(1) ?? "?").uppercased())
+        let source = displayName.isEmpty ? userEmail : displayName
+        return String(source.prefix(1)).uppercased()
     }
 
     private var displayName: String {
-        if let raw = authViewModel.session?.user.userMetadata["full_name"],
-           case .string(let name) = raw, !name.isEmpty {
-            return name
-        }
+        if !viewModel.fullName.isEmpty { return viewModel.fullName }
         return userEmail
     }
 
@@ -33,6 +39,12 @@ struct ProfileView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
+
+                    if viewModel.isLoading {
+                        ProgressView()
+                            .tint(.green)
+                            .padding(.top, 8)
+                    }
 
                     // ── Avatar & name ──────────────────────────────────
                     VStack(spacing: 10) {
@@ -57,16 +69,21 @@ struct ProfileView: View {
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
+                        if !viewModel.city.isEmpty {
+                            Label(viewModel.city, systemImage: "mappin")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     .padding(.top, 8)
 
                     // ── Stats row ──────────────────────────────────────
                     HStack(spacing: 0) {
-                        StatTile(value: "3", label: "Listings")
+                        StatTile(value: "\(viewModel.listingsCount)", label: "Listings")
                         Divider().frame(height: 40)
-                        StatTile(value: "1", label: "Bookings")
+                        StatTile(value: "\(viewModel.bookingsCount)", label: "Bookings")
                         Divider().frame(height: 40)
-                        StatTile(value: "0", label: "Reviews")
+                        StatTile(value: "\(viewModel.reviewsCount)", label: "Reviews")
                     }
                     .background(.green.opacity(0.06), in: RoundedRectangle(cornerRadius: 16))
                     .padding(.horizontal)
@@ -74,20 +91,36 @@ struct ProfileView: View {
                     // ── Menu ───────────────────────────────────────────
                     VStack(spacing: 0) {
                         ProfileMenuSection(title: "My Activity") {
-                            ProfileMenuItem(icon: "tag.fill",               iconColor: .green,  label: "My Listings")
-                            ProfileMenuItem(icon: "calendar.badge.checkmark", iconColor: .blue,   label: "My Bookings")
-                            ProfileMenuItem(icon: "star.fill",              iconColor: .yellow, label: "My Reviews")
+                            ProfileMenuItem(icon: "tag.fill", iconColor: .green, label: "My Listings") {
+                                showMyListings = true
+                            }
+                            ProfileMenuItem(icon: "calendar.badge.checkmark", iconColor: .blue, label: "My Bookings") {
+                                showPlaceholder("Your booking history screen will be here.")
+                            }
+                            ProfileMenuItem(icon: "star.fill", iconColor: .yellow, label: "My Reviews", showDivider: false) {
+                                showPlaceholder("Your reviews screen will be here.")
+                            }
                         }
 
                         ProfileMenuSection(title: "Account") {
-                            ProfileMenuItem(icon: "person.fill",  iconColor: .purple, label: "Edit Profile")
-                            ProfileMenuItem(icon: "bell.fill",    iconColor: .orange, label: "Notifications")
-                            ProfileMenuItem(icon: "lock.fill",    iconColor: .gray,   label: "Privacy & Security")
+                            ProfileMenuItem(icon: "person.fill", iconColor: .purple, label: "Edit Profile") {
+                                showEditProfile = true
+                            }
+                            ProfileMenuItem(icon: "bell.fill", iconColor: .orange, label: "Notifications") {
+                                showPlaceholder("Notifications settings will be here.")
+                            }
+                            ProfileMenuItem(icon: "lock.fill", iconColor: .gray, label: "Privacy & Security", showDivider: false) {
+                                showPlaceholder("Privacy and security settings will be here.")
+                            }
                         }
 
                         ProfileMenuSection(title: "Support") {
-                            ProfileMenuItem(icon: "questionmark.circle.fill", iconColor: .teal,   label: "Help Center")
-                            ProfileMenuItem(icon: "envelope.fill",            iconColor: .indigo, label: "Contact Us")
+                            ProfileMenuItem(icon: "questionmark.circle.fill", iconColor: .teal, label: "Help Center") {
+                                showPlaceholder("Help Center will be available soon.")
+                            }
+                            ProfileMenuItem(icon: "envelope.fill", iconColor: .indigo, label: "Contact Us", showDivider: false) {
+                                showPlaceholder("Email us at support@charagach.app")
+                            }
                         }
                     }
                     .padding(.horizontal)
@@ -107,6 +140,9 @@ struct ProfileView: View {
                 }
             }
             .navigationTitle("Profile")
+            .task {
+                await viewModel.load(session: authViewModel.session)
+            }
         }
         .confirmationDialog("Sign Out", isPresented: $showSignOutConfirm, titleVisibility: .visible) {
             Button("Sign Out", role: .destructive) {
@@ -116,6 +152,30 @@ struct ProfileView: View {
         } message: {
             Text("Are you sure you want to sign out?")
         }
+        .sheet(isPresented: $showEditProfile) {
+            EditProfileView(viewModel: viewModel, session: authViewModel.session)
+        }
+        .sheet(isPresented: $showMyListings) {
+            MyListingsView(authViewModel: authViewModel)
+        }
+        .alert("Profile", isPresented: Binding(
+            get: { viewModel.errorMessage != nil },
+            set: { if !$0 { viewModel.errorMessage = nil } }
+        )) {
+            Button("OK") { viewModel.errorMessage = nil }
+        } message: {
+            Text(viewModel.errorMessage ?? "")
+        }
+        .alert("Coming Soon", isPresented: $showComingSoon) {
+            Button("OK") {}
+        } message: {
+            Text(comingSoonText)
+        }
+    }
+
+    private func showPlaceholder(_ message: String) {
+        comingSoonText = message
+        showComingSoon = true
     }
 }
 
@@ -167,10 +227,12 @@ private struct ProfileMenuItem: View {
     let icon: String
     let iconColor: Color
     let label: String
+    var showDivider: Bool = true
+    let action: () -> Void
 
     var body: some View {
         Button {
-            // TODO: per-item navigation
+            action()
         } label: {
             HStack(spacing: 14) {
                 ZStack {
@@ -192,6 +254,50 @@ private struct ProfileMenuItem: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
         }
-        Divider().padding(.leading, 64)
+        if showDivider {
+            Divider().padding(.leading, 64)
+        }
+    }
+}
+
+// MARK: - Edit Profile Sheet
+
+private struct EditProfileView: View {
+    @ObservedObject var viewModel: ProfileViewModel
+    let session: Session?
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Basic") {
+                    TextField("Full name", text: $viewModel.fullName)
+                    TextField("Email", text: .constant(viewModel.email))
+                        .disabled(true)
+                    TextField("City", text: $viewModel.city)
+                }
+
+                Section("Profile") {
+                    TextField("Avatar URL (optional)", text: $viewModel.avatarURL)
+                    Toggle("I also provide plant sitting", isOn: $viewModel.isCaregiver)
+                }
+            }
+            .navigationTitle("Edit Profile")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Save") {
+                        Task {
+                            await viewModel.save(session: session)
+                            if viewModel.errorMessage == nil { dismiss() }
+                        }
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+        }
     }
 }

@@ -65,7 +65,8 @@ final class SupabaseDataStore: ObservableObject {
                     description: row.description ?? "",
                     iconName: Self.iconName(for: row.category),
                     iconColor: Self.iconColor(for: row.category),
-                    postedDaysAgo: Self.daysAgo(from: row.createdAt)
+                    postedDaysAgo: Self.daysAgo(from: row.createdAt),
+                    status: row.status
                 )
             }
 
@@ -100,6 +101,62 @@ final class SupabaseDataStore: ObservableObject {
             .execute()
 
         await loadListings()
+    }
+
+    func loadMyListings(session: Session?) async throws -> [PlantListing] {
+        guard let userID = session?.user.id else {
+            throw DataStoreError.notAuthenticated
+        }
+
+        let response = try await supabase.database
+            .from("plant_listings")
+            .select()
+            .eq("seller_id", value: userID.uuidString)
+            .order("created_at", ascending: false)
+            .execute()
+
+        let decoder = JSONDecoder()
+        let rows: [DBPlantListing] = try decodeArray(from: response.data, decoder: decoder)
+
+        return rows.map { row in
+            PlantListing(
+                id: row.id,
+                name: row.title,
+                species: row.species,
+                price: row.price,
+                category: PlantCategory(rawValue: row.category) ?? .indoor,
+                condition: PlantCondition(rawValue: row.condition) ?? .good,
+                sellerName: "You",
+                location: row.city ?? "Unknown",
+                description: row.description ?? "",
+                iconName: Self.iconName(for: row.category),
+                iconColor: Self.iconColor(for: row.category),
+                postedDaysAgo: Self.daysAgo(from: row.createdAt),
+                status: row.status
+            )
+        }
+    }
+
+    func updateListingStatus(listingID: UUID, status: String, session: Session?) async throws {
+        guard session != nil else { throw DataStoreError.notAuthenticated }
+
+        let payload = DBListingStatusUpdate(status: status)
+
+        _ = try await supabase.database
+            .from("plant_listings")
+            .update(payload)
+            .eq("id", value: listingID.uuidString)
+            .execute()
+    }
+
+    func deleteListing(listingID: UUID, session: Session?) async throws {
+        guard session != nil else { throw DataStoreError.notAuthenticated }
+
+        _ = try await supabase.database
+            .from("plant_listings")
+            .delete()
+            .eq("id", value: listingID.uuidString)
+            .execute()
     }
 
     func loadCaregivers() async {
@@ -301,6 +358,7 @@ private struct DBPlantListing: Decodable {
     let description: String?
     let city: String?
     let createdAt: String?
+    let status: String
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -313,6 +371,7 @@ private struct DBPlantListing: Decodable {
         case description
         case city
         case createdAt = "created_at"
+        case status
     }
 
     init(from decoder: Decoder) throws {
@@ -327,6 +386,7 @@ private struct DBPlantListing: Decodable {
         description = try container.decodeIfPresent(String.self, forKey: .description)
         city = try container.decodeIfPresent(String.self, forKey: .city)
         createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt)
+        status = try container.decodeIfPresent(String.self, forKey: .status) ?? "active"
     }
 }
 
@@ -352,6 +412,10 @@ private struct DBPlantListingInsert: Encodable {
         case city
         case status
     }
+}
+
+private struct DBListingStatusUpdate: Encodable {
+    let status: String
 }
 
 private struct DBListingProfile: Decodable {

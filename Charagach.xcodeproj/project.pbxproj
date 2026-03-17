@@ -27,6 +27,8 @@
 		22B796092F697A040072E85A /* PlantCareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22B796082F697A040072E85A /* PlantCareView.swift */; };
 		22B7960B2F697A050072E85A /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22B7960A2F697A050072E85A /* ProfileView.swift */; };
 		22B7960D2F697A060072E85A /* SupabaseDataStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22B7960C2F697A060072E85A /* SupabaseDataStore.swift */; };
+		22B7960F2F697A070072E85A /* ProfileViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22B7960E2F697A070072E85A /* ProfileViewModel.swift */; };
+		22B796112F697A080072E85A /* MyListingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22B796102F697A080072E85A /* MyListingsView.swift */; };
 		22E152BD2F24DA8000EB92DC /* CharagachApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22E152BC2F24DA8000EB92DC /* CharagachApp.swift */; };
 		22E152BF2F24DA8000EB92DC /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22E152BE2F24DA8000EB92DC /* ContentView.swift */; };
 		22E152C12F24DA8200EB92DC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 22E152C02F24DA8200EB92DC /* Assets.xcassets */; };
@@ -65,6 +67,8 @@
 		22B796082F697A040072E85A /* PlantCareView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlantCareView.swift; sourceTree = "<group>"; };
 		22B7960A2F697A050072E85A /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
 		22B7960C2F697A060072E85A /* SupabaseDataStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseDataStore.swift; sourceTree = "<group>"; };
+		22B7960E2F697A070072E85A /* ProfileViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileViewModel.swift; sourceTree = "<group>"; };
+		22B796102F697A080072E85A /* MyListingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyListingsView.swift; sourceTree = "<group>"; };
 		22E152B92F24DA8000EB92DC /* Charagach.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Charagach.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		22E152BC2F24DA8000EB92DC /* CharagachApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CharagachApp.swift; sourceTree = "<group>"; };
 		22E152BE2F24DA8000EB92DC /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -135,8 +139,10 @@
 				22B796062F697A030072E85A /* PlantSittingView.swift */,
 				22B796082F697A040072E85A /* PlantCareView.swift */,
 				22B7960A2F697A050072E85A /* ProfileView.swift */,
+				22B796102F697A080072E85A /* MyListingsView.swift */,
 				22B795C72F69734F0072E85A /* Supabase.swift */,
 				22B7960C2F697A060072E85A /* SupabaseDataStore.swift */,
+				22B7960E2F697A070072E85A /* ProfileViewModel.swift */,
 				22B795CB2F6974ED0072E85A /* AuthViewModel.swift */,
 				22B796002F697A000072E85A /* Models.swift */,
 				22B796022F697A010072E85A /* SharedComponents.swift */,
@@ -309,6 +315,8 @@
 				22B795D42F69758F0072E85A /* LoginView.swift in Sources */,
 				22B7960B2F697A050072E85A /* ProfileView.swift in Sources */,
 				22B7960D2F697A060072E85A /* SupabaseDataStore.swift in Sources */,
+				22B7960F2F697A070072E85A /* ProfileViewModel.swift in Sources */,
+				22B796112F697A080072E85A /* MyListingsView.swift in Sources */,
 				22B795CC2F6974ED0072E85A /* AuthViewModel.swift in Sources */,
 				22B796092F697A040072E85A /* PlantCareView.swift in Sources */,
 				22B795C82F69734F0072E85A /* Supabase.swift in Sources */,
