@@ -7,22 +7,32 @@
 
 import SwiftUI
 
-/// Post-authentication screen shown when a user is signed in.
+/// Root tab container shown once the user is authenticated.
 struct HomeView: View {
-    /// Access to auth actions for signing out from the home screen.
     @ObservedObject var authViewModel: AuthViewModel
+
     var body: some View {
-        // Example content for the authenticated area.
-        Text("WELCOME HOME")
-        // Allow the user to sign out and clear their session.
-        Button("sign-out"){
-            Task {
-                await authViewModel.signOut()
-            }
+        TabView {
+            MarketplaceView(authViewModel: authViewModel)
+                .tabItem {
+                    Label("Marketplace", systemImage: "cart.fill")
+                }
+
+            PlantSittingView(authViewModel: authViewModel)
+                .tabItem {
+                    Label("Plant Sitting", systemImage: "hands.and.sparkles.fill")
+                }
+
+            PlantCareView()
+                .tabItem {
+                    Label("Care Tips", systemImage: "leaf.fill")
+                }
+
+            ProfileView(authViewModel: authViewModel)
+                .tabItem {
+                    Label("Profile", systemImage: "person.circle.fill")
+                }
         }
+        .tint(.green)
     }
 }
-//
-//#Preview {
-//    HomeView()
-//}
