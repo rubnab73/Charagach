@@ -8,6 +8,18 @@
 
 /* Begin PBXBuildFile section */
 		22B795C62F6970BE0072E85A /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 22B795C52F6970BE0072E85A /* Supabase */; };
+		22B795C82F69734F0072E85A /* Supabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22B795C72F69734F0072E85A /* Supabase.swift */; };
+		22B795C92F69734F0072E85A /* Supabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22B795C72F69734F0072E85A /* Supabase.swift */; };
+		22B795CA2F69734F0072E85A /* Supabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22B795C72F69734F0072E85A /* Supabase.swift */; };
+		22B795CC2F6974ED0072E85A /* AuthViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22B795CB2F6974ED0072E85A /* AuthViewModel.swift */; };
+		22B795CD2F6974ED0072E85A /* AuthViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22B795CB2F6974ED0072E85A /* AuthViewModel.swift */; };
+		22B795CE2F6974ED0072E85A /* AuthViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22B795CB2F6974ED0072E85A /* AuthViewModel.swift */; };
+		22B795D02F6975560072E85A /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22B795CF2F6975560072E85A /* HomeView.swift */; };
+		22B795D12F6975560072E85A /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22B795CF2F6975560072E85A /* HomeView.swift */; };
+		22B795D22F6975560072E85A /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22B795CF2F6975560072E85A /* HomeView.swift */; };
+		22B795D42F69758F0072E85A /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22B795D32F69758F0072E85A /* LoginView.swift */; };
+		22B795D52F69758F0072E85A /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22B795D32F69758F0072E85A /* LoginView.swift */; };
+		22B795D62F69758F0072E85A /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22B795D32F69758F0072E85A /* LoginView.swift */; };
 		22E152BD2F24DA8000EB92DC /* CharagachApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22E152BC2F24DA8000EB92DC /* CharagachApp.swift */; };
 		22E152BF2F24DA8000EB92DC /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22E152BE2F24DA8000EB92DC /* ContentView.swift */; };
 		22E152C12F24DA8200EB92DC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 22E152C02F24DA8200EB92DC /* Assets.xcassets */; };
@@ -35,6 +47,10 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		22B795C72F69734F0072E85A /* Supabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Supabase.swift; sourceTree = "<group>"; };
+		22B795CB2F6974ED0072E85A /* AuthViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthViewModel.swift; sourceTree = "<group>"; };
+		22B795CF2F6975560072E85A /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		22B795D32F69758F0072E85A /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		22E152B92F24DA8000EB92DC /* Charagach.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Charagach.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		22E152BC2F24DA8000EB92DC /* CharagachApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CharagachApp.swift; sourceTree = "<group>"; };
 		22E152BE2F24DA8000EB92DC /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -96,9 +112,13 @@
 		22E152BB2F24DA8000EB92DC /* Charagach */ = {
 			isa = PBXGroup;
 			children = (
+				22E152C02F24DA8200EB92DC /* Assets.xcassets */,
 				22E152BC2F24DA8000EB92DC /* CharagachApp.swift */,
 				22E152BE2F24DA8000EB92DC /* ContentView.swift */,
-				22E152C02F24DA8200EB92DC /* Assets.xcassets */,
+				22B795CF2F6975560072E85A /* HomeView.swift */,
+				22B795D32F69758F0072E85A /* LoginView.swift */,
+				22B795C72F69734F0072E85A /* Supabase.swift */,
+				22B795CB2F6974ED0072E85A /* AuthViewModel.swift */,
 				22E152C22F24DA8200EB92DC /* Preview Content */,
 			);
 			path = Charagach;
@@ -265,7 +285,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				22B795D42F69758F0072E85A /* LoginView.swift in Sources */,
+				22B795CC2F6974ED0072E85A /* AuthViewModel.swift in Sources */,
+				22B795C82F69734F0072E85A /* Supabase.swift in Sources */,
 				22E152BF2F24DA8000EB92DC /* ContentView.swift in Sources */,
+				22B795D02F6975560072E85A /* HomeView.swift in Sources */,
 				22E152BD2F24DA8000EB92DC /* CharagachApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -274,7 +298,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				22B795C92F69734F0072E85A /* Supabase.swift in Sources */,
+				22B795D12F6975560072E85A /* HomeView.swift in Sources */,
 				22E152CE2F24DA8200EB92DC /* CharagachTests.swift in Sources */,
+				22B795D52F69758F0072E85A /* LoginView.swift in Sources */,
+				22B795CD2F6974ED0072E85A /* AuthViewModel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -282,7 +310,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				22B795D62F69758F0072E85A /* LoginView.swift in Sources */,
+				22B795CE2F6974ED0072E85A /* AuthViewModel.swift in Sources */,
+				22B795CA2F69734F0072E85A /* Supabase.swift in Sources */,
 				22E152D82F24DA8200EB92DC /* CharagachUITests.swift in Sources */,
+				22B795D22F6975560072E85A /* HomeView.swift in Sources */,
 				22E152DA2F24DA8200EB92DC /* CharagachUITestsLaunchTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
