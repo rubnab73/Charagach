@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		22B795C62F6970BE0072E85A /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 22B795C52F6970BE0072E85A /* Supabase */; };
 		22E152BD2F24DA8000EB92DC /* CharagachApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22E152BC2F24DA8000EB92DC /* CharagachApp.swift */; };
 		22E152BF2F24DA8000EB92DC /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22E152BE2F24DA8000EB92DC /* ContentView.swift */; };
 		22E152C12F24DA8200EB92DC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 22E152C02F24DA8200EB92DC /* Assets.xcassets */; };
@@ -51,6 +52,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				22B795C62F6970BE0072E85A /* Supabase in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -143,6 +145,9 @@
 			dependencies = (
 			);
 			name = Charagach;
+			packageProductDependencies = (
+				22B795C52F6970BE0072E85A /* Supabase */,
+			);
 			productName = Charagach;
 			productReference = 22E152B92F24DA8000EB92DC /* Charagach.app */;
 			productType = "com.apple.product-type.application";
@@ -215,6 +220,9 @@
 				Base,
 			);
 			mainGroup = 22E152B02F24DA8000EB92DC;
+			packageReferences = (
+				22B795C42F6970BE0072E85A /* XCRemoteSwiftPackageReference "supabase-swift" */,
+			);
 			productRefGroup = 22E152BA2F24DA8000EB92DC /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -577,6 +585,26 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		22B795C42F6970BE0072E85A /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift";
+			requirement = {
+				kind = versionRange;
+				maximumVersion = 2.0.0;
+				minimumVersion = 1.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		22B795C52F6970BE0072E85A /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 22B795C42F6970BE0072E85A /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 22E152B12F24DA8000EB92DC /* Project object */;
 }
