@@ -5,6 +5,7 @@
 //  Created by macOS on 3/17/26.
 //
 
+import Foundation
 import SwiftUI
 
 // MARK: - Plant Listing (Marketplace)
@@ -272,6 +273,157 @@ extension Caregiver {
         ),
     ]
 }
+
+enum PlantSittingBookingRole {
+    case owner
+    case caregiver
+}
+
+enum PlantSittingStatus: String {
+    case pending = "pending"
+    case confirmed = "confirmed"
+    case completed = "completed"
+    case cancelled = "cancelled"
+
+    func title(for role: PlantSittingBookingRole) -> String {
+        switch role {
+        case .owner:
+            switch self {
+            case .pending, .confirmed: return "Booked"
+            case .completed: return "Completed"
+            case .cancelled: return "Cancelled"
+            }
+        case .caregiver:
+            switch self {
+            case .pending: return "Pending Check"
+            case .confirmed: return "Checked"
+            case .completed: return "Completed"
+            case .cancelled: return "Cancelled"
+            }
+        }
+    }
+
+    var tintColor: Color {
+        switch self {
+        case .pending, .confirmed: return .blue
+        case .completed: return .green
+        case .cancelled: return .gray
+        }
+    }
+
+    var isActive: Bool {
+        self == .pending || self == .confirmed
+    }
+}
+
+struct PlantSittingBooking: Identifiable {
+    let id: UUID
+    let plantName: String
+    let ownerID: UUID
+    let caregiverID: UUID
+    let ownerName: String
+    let caregiverName: String
+    let startDate: Date
+    let endDate: Date
+    let notes: String
+    let totalPrice: Double
+    let status: PlantSittingStatus
+    let createdAt: Date
+
+    init(
+        id: UUID = UUID(),
+        plantName: String,
+        ownerID: UUID,
+        caregiverID: UUID,
+        ownerName: String,
+        caregiverName: String,
+        startDate: Date,
+        endDate: Date,
+        notes: String = "",
+        totalPrice: Double,
+        status: PlantSittingStatus = .pending,
+        createdAt: Date = Date()
+    ) {
+        self.id = id
+        self.plantName = plantName
+        self.ownerID = ownerID
+        self.caregiverID = caregiverID
+        self.ownerName = ownerName
+        self.caregiverName = caregiverName
+        self.startDate = startDate
+        self.endDate = endDate
+        self.notes = notes
+        self.totalPrice = totalPrice
+        self.status = status
+        self.createdAt = createdAt
+    }
+
+    var plannedDays: Int {
+        max(1, Calendar.current.dateComponents([.day], from: startDate, to: endDate).day ?? 0 + 1)
+    }
+
+    var daysUnderSitting: Int {
+        let difference = Calendar.current.dateComponents([.day], from: startDate, to: Date()).day ?? 0
+        return max(0, difference + 1)
+    }
+
+    var daysUntilStart: Int {
+        max(0, Calendar.current.dateComponents([.day], from: Date(), to: startDate).day ?? 0)
+    }
+
+    var daysBooked: Int {
+        let difference = Calendar.current.dateComponents([.day], from: createdAt, to: Date()).day ?? 0
+        return max(1, difference + 1)
+    }
+
+    var durationText: String {
+        if daysUntilStart > 0 {
+            return "Starts in \(daysUntilStart) day\(daysUntilStart == 1 ? "" : "s")"
+        }
+        return "\(daysUnderSitting) day\(daysUnderSitting == 1 ? "" : "s") under sitting"
+    }
+
+    var bookedText: String {
+        "\(daysBooked) day\(daysBooked == 1 ? "" : "s") booked"
+    }
+}
+
+extension PlantSittingBooking {
+    static let samples: [PlantSittingBooking] = {
+        let calendar = Calendar.current
+        let now = Date()
+
+        return [
+            PlantSittingBooking(
+                plantName: "Monstera Deliciosa",
+                ownerID: UUID(),
+                caregiverID: UUID(),
+                ownerName: "Nusrat Jahan",
+                caregiverName: "Ayesha Rahman",
+                startDate: calendar.date(byAdding: .day, value: -2, to: now) ?? now,
+                endDate: calendar.date(byAdding: .day, value: 4, to: now) ?? now,
+                notes: "Keep in bright indirect light.",
+                totalPrice: 1200,
+                status: .confirmed,
+                createdAt: calendar.date(byAdding: .day, value: -3, to: now) ?? now
+            ),
+            PlantSittingBooking(
+                plantName: "Snake Plant",
+                ownerID: UUID(),
+                caregiverID: UUID(),
+                ownerName: "Mahmud Rahman",
+                caregiverName: "Tanvir Ahmed",
+                startDate: calendar.date(byAdding: .day, value: 1, to: now) ?? now,
+                endDate: calendar.date(byAdding: .day, value: 5, to: now) ?? now,
+                notes: "Water lightly once a week.",
+                totalPrice: 900,
+                status: .pending,
+                createdAt: now
+            )
+        ]
+    }()
+}
+
 // MARK: - Sample Data: Plant Care Tips
 
 extension PlantCareTip {

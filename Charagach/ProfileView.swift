@@ -19,6 +19,7 @@ struct ProfileView: View {
     @State private var showSignOutConfirm = false
     @State private var showEditProfile = false
     @State private var showMyListings = false
+    @State private var showMyBookings = false
     @State private var showComingSoon = false
     @State private var comingSoonText = ""
     @State private var showProfileError = false
@@ -86,7 +87,7 @@ struct ProfileView: View {
                                 showMyListings = true
                             }
                             ProfileMenuItem(icon: "calendar.badge.checkmark", iconColor: .blue, label: "My Bookings") {
-                                showPlaceholder("Your booking history screen will be here.")
+                                showMyBookings = true
                             }
                             ProfileMenuItem(icon: "star.fill", iconColor: .yellow, label: "My Reviews", showDivider: false) {
                                 showPlaceholder("Your reviews screen will be here.")
@@ -148,6 +149,9 @@ struct ProfileView: View {
         }
         .sheet(isPresented: $showMyListings) {
             MyListingsView(authViewModel: authViewModel)
+        }
+        .sheet(isPresented: $showMyBookings) {
+            PlantSittingBookingsView(authViewModel: authViewModel)
         }
         .onChange(of: viewModel.errorMessage) { newValue in
             guard let message = newValue, !message.isEmpty else { return }

@@ -9,11 +9,17 @@ import SwiftUI
 
 // MARK: - Plant Sitting Tab
 
+private enum PlantSittingMode: String, CaseIterable {
+    case browse = "Browse"
+    case bookings = "My Sittings"
+}
+
 struct PlantSittingView: View {
     @ObservedObject var authViewModel: AuthViewModel
     @StateObject private var dataStore = SupabaseDataStore()
     @State private var showBecomeSitter = false
     @State private var showSaved = false
+    @State private var selectedMode: PlantSittingMode = .browse
 
     var body: some View {
         NavigationStack {
@@ -60,25 +66,39 @@ struct PlantSittingView: View {
                     .background(.green.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
                     .padding(.horizontal)
 
-                    // ── Caregiver list ─────────────────────────────────
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Text("Available Caregivers")
-                                .font(.headline)
-                            Spacer()
-                            Text("\(dataStore.caregivers.filter(\.isAvailable).count) available")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                    Picker("Plant Sitting", selection: $selectedMode) {
+                        ForEach(PlantSittingMode.allCases, id: \.self) { mode in
+                            Text(mode.rawValue).tag(mode)
                         }
-                        .padding(.horizontal)
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal)
 
-                        ForEach(dataStore.caregivers) { caregiver in
-                            NavigationLink(destination: CaregiverDetailView(caregiver: caregiver)) {
-                                CaregiverCard(caregiver: caregiver)
+                    if selectedMode == .browse {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Text("Available Caregivers")
+                                    .font(.headline)
+                                Spacer()
+                                Text("\(dataStore.caregivers.filter(\.isAvailable).count) available")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
-                            .buttonStyle(.plain)
                             .padding(.horizontal)
+
+                            ForEach(dataStore.caregivers) { caregiver in
+                                NavigationLink(destination: CaregiverDetailView(caregiver: caregiver) { input in
+                                    try await dataStore.createBooking(input, session: authViewModel.session)
+                                }) {
+                                    CaregiverCard(caregiver: caregiver)
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.horizontal)
+                            }
                         }
+                    } else {
+                        PlantSittingBookingsSection(authViewModel: authViewModel, dataStore: dataStore)
+                            .padding(.horizontal)
                     }
                 }
                 .padding(.vertical)
@@ -109,6 +129,7 @@ struct PlantSittingView: View {
             }
             .task {
                 await dataStore.loadCaregivers()
+                await dataStore.loadBookings(session: authViewModel.session)
             }
             .alert("Plant Sitting", isPresented: Binding(
                 get: { dataStore.errorMessage != nil },
@@ -251,6 +272,197 @@ private struct HowItWorksStep: View {
     }
 }
 
+struct PlantSittingBookingsView: View {
+    @ObservedObject var authViewModel: AuthViewModel
+    @StateObject private var dataStore = SupabaseDataStore()
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                PlantSittingBookingsSection(authViewModel: authViewModel, dataStore: dataStore)
+                    .padding(.horizontal)
+                    .padding(.vertical)
+            }
+            .navigationTitle("My Bookings")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+        .task {
+            await dataStore.loadBookings(session: authViewModel.session)
+        }
+        .alert("Plant Sitting", isPresented: Binding(
+            get: { dataStore.errorMessage != nil },
+            set: { if !$0 { dataStore.errorMessage = nil } }
+        )) {
+            Button("OK") { dataStore.errorMessage = nil }
+        } message: {
+            Text(dataStore.errorMessage ?? "")
+        }
+    }
+}
+
+private struct PlantSittingBookingsSection: View {
+    @ObservedObject var authViewModel: AuthViewModel
+    @ObservedObject var dataStore: SupabaseDataStore
+
+    private var userID: UUID? {
+        authViewModel.session?.user.id
+    }
+
+    private var ownerBookings: [PlantSittingBooking] {
+        guard let userID else { return [] }
+        return dataStore.bookings
+            .filter { $0.ownerID == userID }
+            .sorted { $0.createdAt > $1.createdAt }
+    }
+
+    private var caregiverBookings: [PlantSittingBooking] {
+        guard let userID else { return [] }
+        return dataStore.bookings
+            .filter { $0.caregiverID == userID }
+            .sorted { $0.createdAt > $1.createdAt }
+    }
+
+    private var activeCount: Int {
+        ownerBookings.filter(\.status.isActive).count + caregiverBookings.filter(\.status.isActive).count
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Sitting Overview")
+                        .font(.headline)
+                    Text("Booked status shows for owners while the plant is under sitting.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text("\(activeCount) active")
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(.green.opacity(0.12), in: Capsule())
+                    .foregroundStyle(.green)
+            }
+
+            if ownerBookings.isEmpty && caregiverBookings.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "leaf")
+                        .font(.system(size: 34))
+                        .foregroundStyle(.secondary)
+                    Text("No sitting bookings yet")
+                        .font(.headline)
+                    Text("Your booked plants and caregiver checks will appear here.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 28)
+            } else {
+                if !ownerBookings.isEmpty {
+                    bookingGroup(title: "Owner Side", subtitle: "Plants you booked will show as Booked while sitting is active.") {
+                        ForEach(ownerBookings) { booking in
+                            PlantSittingBookingRow(booking: booking, role: .owner) {
+                                nil
+                            }
+                        }
+                    }
+                }
+
+                if !caregiverBookings.isEmpty {
+                    bookingGroup(title: "Caregiver Side", subtitle: "Confirm the plant is okay when you check it.") {
+                        ForEach(caregiverBookings) { booking in
+                            PlantSittingBookingRow(booking: booking, role: .caregiver) {
+                                guard booking.status.isActive else { return nil }
+                                return {
+                                    Task {
+                                        do {
+                                            try await dataStore.markBookingChecked(bookingID: booking.id, session: authViewModel.session)
+                                        } catch {
+                                            dataStore.errorMessage = error.localizedDescription
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func bookingGroup<Content: View>(title: String, subtitle: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.headline)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(spacing: 12) {
+                content()
+            }
+        }
+    }
+}
+
+private struct PlantSittingBookingRow: View {
+    let booking: PlantSittingBooking
+    let role: PlantSittingBookingRole
+    let checkAction: () -> (() -> Void)?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(booking.plantName)
+                        .font(.subheadline.weight(.semibold))
+                    Text(role == .owner ? "Caregiver: \(booking.caregiverName)" : "Owner: \(booking.ownerName)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text(booking.status.title(for: role))
+                    .font(.caption2.weight(.semibold))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(booking.status.tintColor.opacity(0.15), in: Capsule())
+                    .foregroundStyle(booking.status.tintColor)
+            }
+
+            HStack(spacing: 8) {
+                TagView(text: "\(booking.plannedDays) days", color: .green)
+                TagView(text: booking.durationText, color: .blue)
+                TagView(text: booking.bookedText, color: .orange)
+            }
+
+            if !booking.notes.isEmpty {
+                Text(booking.notes)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if role == .caregiver, let action = checkAction() {
+                Button(action: action) {
+                    Text("Check Plant")
+                        .font(.caption.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 7)
+                }
+                .buttonStyle(.bordered)
+                .tint(.green)
+            }
+        }
+        .padding(14)
+        .background(.background, in: RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.05), radius: 6, x: 0, y: 2)
+    }
+}
+
 // MARK: - Caregiver Card
 
 struct CaregiverCard: View {
@@ -329,16 +541,48 @@ struct CaregiverCard: View {
 
 struct CaregiverDetailView: View {
     let caregiver: Caregiver
+    let onBook: (NewPlantSittingBookingInput) async throws -> Void
 
+    @State private var plantName = ""
+    @State private var notes = ""
     @State private var startDate = Date()
     @State private var endDate = Calendar.current.date(byAdding: .day, value: 3, to: Date()) ?? Date()
     @State private var showBookingConfirm = false
     @State private var showBooked = false
+    @State private var bookingErrorMessage: String?
 
     private var nights: Int {
         max(1, Calendar.current.dateComponents([.day], from: startDate, to: endDate).day ?? 1)
     }
     private var totalCost: Double { Double(nights) * caregiver.pricePerDay }
+
+    private func submitBooking() {
+        let trimmedPlantName = plantName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedPlantName.isEmpty else {
+            bookingErrorMessage = "Please enter the plant name."
+            return
+        }
+
+        let payload = NewPlantSittingBookingInput(
+            plantName: trimmedPlantName,
+            caregiverID: caregiver.id,
+            caregiverName: caregiver.name,
+            startDate: startDate,
+            endDate: endDate,
+            notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
+            totalPrice: totalCost
+        )
+
+        Task {
+            do {
+                try await onBook(payload)
+                showBooked = true
+                bookingErrorMessage = nil
+            } catch {
+                bookingErrorMessage = error.localizedDescription
+            }
+        }
+    }
 
     var body: some View {
         ScrollView {
@@ -421,8 +665,18 @@ struct CaregiverDetailView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     Text("Book a Stay")
                         .font(.headline)
+                    TextField("Plant name", text: $plantName)
+                        .textFieldStyle(.roundedBorder)
+                    TextField("Notes for caregiver", text: $notes, axis: .vertical)
+                        .textFieldStyle(.roundedBorder)
+                        .lineLimit(2...4)
                     DatePicker("Drop-off Date", selection: $startDate, in: Date()..., displayedComponents: .date)
                     DatePicker("Pick-up Date", selection: $endDate, in: startDate..., displayedComponents: .date)
+                    if let bookingErrorMessage {
+                        Text(bookingErrorMessage)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
                 }
                 .padding(.horizontal)
 
@@ -466,7 +720,7 @@ struct CaregiverDetailView: View {
         .navigationTitle("Caregiver Profile")
         .navigationBarTitleDisplayMode(.inline)
         .confirmationDialog("Confirm Booking", isPresented: $showBookingConfirm, titleVisibility: .visible) {
-            Button("Book for ৳\(Int(totalCost))") { showBooked = true }
+            Button("Book for ৳\(Int(totalCost))") { submitBooking() }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Book \(caregiver.name) from \(startDate.formatted(date: .abbreviated, time: .omitted)) to \(endDate.formatted(date: .abbreviated, time: .omitted))?")

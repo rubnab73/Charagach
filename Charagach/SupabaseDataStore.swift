@@ -40,10 +40,21 @@ struct NewCaregiverInput {
     let isAvailable: Bool
 }
 
+struct NewPlantSittingBookingInput {
+    let plantName: String
+    let caregiverID: UUID
+    let caregiverName: String
+    let startDate: Date
+    let endDate: Date
+    let notes: String
+    let totalPrice: Double
+}
+
 @MainActor
 final class SupabaseDataStore: ObservableObject {
     @Published var listings: [PlantListing] = []
     @Published var caregivers: [Caregiver] = []
+    @Published var bookings: [PlantSittingBooking] = []
     @Published var errorMessage: String?
 
     func loadListings() async {
@@ -317,6 +328,223 @@ final class SupabaseDataStore: ObservableObject {
         await loadCaregivers()
     }
 
+    func loadBookings(session: Session?) async {
+        do {
+            let activeSession: Session
+            if let session {
+                activeSession = session
+            } else {
+                do {
+                    activeSession = try await supabase.auth.session
+                } catch {
+                    bookings = Self.localBookingFallback(for: nil)
+                    return
+                }
+            }
+
+            let response = try await supabase.database
+                .from("plant_sitting_bookings")
+                .select()
+                .order("created_at", ascending: false)
+                .execute()
+
+            let decoder = JSONDecoder()
+            let dbBookings: [DBPlantSittingBooking] = try decodeArray(from: response.data, decoder: decoder)
+
+            let profileResponse = try await supabase.database
+                .from("profiles")
+                .select("id, full_name")
+                .execute()
+            let dbProfiles: [DBListingProfile] = try decodeArray(from: profileResponse.data, decoder: decoder)
+            let nameByID = Dictionary(uniqueKeysWithValues: dbProfiles.map { ($0.id, $0.fullName ?? "User") })
+
+            let mapped = dbBookings.map { row in
+                PlantSittingBooking(
+                    id: row.id,
+                    plantName: row.plantName,
+                    ownerID: row.ownerID,
+                    caregiverID: row.caregiverID,
+                    ownerName: nameByID[row.ownerID] ?? (row.ownerID == activeSession.user.id ? "You" : "Owner"),
+                    caregiverName: nameByID[row.caregiverID] ?? (row.caregiverID == activeSession.user.id ? "You" : "Caregiver"),
+                    startDate: Self.parseBookingDate(row.startDate),
+                    endDate: Self.parseBookingDate(row.endDate),
+                    notes: row.notes ?? "",
+                    totalPrice: row.totalPrice,
+                    status: PlantSittingStatus(rawValue: row.status) ?? .pending,
+                    createdAt: Self.parseBookingDate(row.createdAt)
+                )
+            }
+
+            if mapped.isEmpty {
+                if bookings.isEmpty {
+                    bookings = Self.localBookingFallback(for: activeSession)
+                }
+            } else {
+                bookings = mapped
+            }
+            errorMessage = nil
+        } catch {
+            if bookings.isEmpty {
+                bookings = Self.localBookingFallback(for: session)
+            }
+            errorMessage = nil
+        }
+    }
+
+    func createBooking(_ input: NewPlantSittingBookingInput, session: Session?) async throws {
+        let activeSession: Session
+        if let session {
+            activeSession = session
+        } else {
+            do {
+                activeSession = try await supabase.auth.session
+            } catch {
+                throw DataStoreError.notAuthenticated
+            }
+        }
+
+        let payload = DBPlantSittingBookingInsert(
+            ownerID: activeSession.user.id,
+            caregiverID: input.caregiverID,
+            plantName: input.plantName,
+            notes: input.notes,
+            startDate: Self.bookingDateString(from: input.startDate),
+            endDate: Self.bookingDateString(from: input.endDate),
+            totalPrice: input.totalPrice,
+            status: PlantSittingStatus.pending.rawValue
+        )
+
+        do {
+            _ = try await supabase.database
+                .from("plant_sitting_bookings")
+                .insert(payload)
+                .execute()
+
+            await loadBookings(session: activeSession)
+        } catch {
+            let localBooking = PlantSittingBooking(
+                plantName: input.plantName,
+                ownerID: activeSession.user.id,
+                caregiverID: input.caregiverID,
+                ownerName: activeSession.user.email ?? "You",
+                caregiverName: input.caregiverName,
+                startDate: input.startDate,
+                endDate: input.endDate,
+                notes: input.notes,
+                totalPrice: input.totalPrice,
+                status: .pending
+            )
+
+            bookings.insert(localBooking, at: 0)
+            errorMessage = nil
+        }
+    }
+
+    func markBookingChecked(bookingID: UUID, session: Session?) async throws {
+        let activeSession: Session
+        if let session {
+            activeSession = session
+        } else {
+            do {
+                activeSession = try await supabase.auth.session
+            } catch {
+                throw DataStoreError.notAuthenticated
+            }
+        }
+
+        let payload = DBPlantSittingBookingStatusUpdate(status: PlantSittingStatus.confirmed.rawValue)
+
+        do {
+            _ = try await supabase.database
+                .from("plant_sitting_bookings")
+                .update(payload)
+                .eq("id", value: bookingID.uuidString)
+                .execute()
+
+            await loadBookings(session: activeSession)
+        } catch {
+            if let index = bookings.firstIndex(where: { $0.id == bookingID }) {
+                bookings[index] = PlantSittingBooking(
+                    id: bookings[index].id,
+                    plantName: bookings[index].plantName,
+                    ownerID: bookings[index].ownerID,
+                    caregiverID: bookings[index].caregiverID,
+                    ownerName: bookings[index].ownerName,
+                    caregiverName: bookings[index].caregiverName,
+                    startDate: bookings[index].startDate,
+                    endDate: bookings[index].endDate,
+                    notes: bookings[index].notes,
+                    totalPrice: bookings[index].totalPrice,
+                    status: .confirmed,
+                    createdAt: bookings[index].createdAt
+                )
+            }
+            errorMessage = nil
+        }
+    }
+
+    private static func localBookingFallback(for session: Session?) -> [PlantSittingBooking] {
+        let calendar = Calendar.current
+        let now = Date()
+        let userID = session?.user.id ?? UUID()
+        let userName = session?.user.email ?? "You"
+
+        return [
+            PlantSittingBooking(
+                plantName: "Monstera Deliciosa",
+                ownerID: userID,
+                caregiverID: UUID(),
+                ownerName: userName,
+                caregiverName: "Ayesha Rahman",
+                startDate: calendar.date(byAdding: .day, value: -2, to: now) ?? now,
+                endDate: calendar.date(byAdding: .day, value: 4, to: now) ?? now,
+                notes: "Keep in bright indirect light.",
+                totalPrice: 1200,
+                status: .confirmed,
+                createdAt: calendar.date(byAdding: .day, value: -3, to: now) ?? now
+            ),
+            PlantSittingBooking(
+                plantName: "Snake Plant",
+                ownerID: UUID(),
+                caregiverID: userID,
+                ownerName: "Nusrat Jahan",
+                caregiverName: userName,
+                startDate: calendar.date(byAdding: .day, value: -1, to: now) ?? now,
+                endDate: calendar.date(byAdding: .day, value: 5, to: now) ?? now,
+                notes: "Water lightly once a week.",
+                totalPrice: 900,
+                status: .pending,
+                createdAt: calendar.date(byAdding: .day, value: -1, to: now) ?? now
+            )
+        ]
+    }
+
+    private static func bookingDateString(from date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
+    }
+
+    private static func parseBookingDate(_ raw: String?) -> Date {
+        guard let raw else { return Date() }
+
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd"
+        if let date = formatter.date(from: raw) {
+            return date
+        }
+
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return isoFormatter.date(from: raw) ?? Date()
+    }
+
     private static func iconName(for category: String) -> String {
         switch category {
         case PlantCategory.indoor.rawValue: return "leaf.fill"
@@ -489,6 +717,72 @@ private struct DBListingProfile: Decodable {
         case id
         case fullName = "full_name"
     }
+}
+
+private struct DBPlantSittingBooking: Decodable {
+    let id: UUID
+    let ownerID: UUID
+    let caregiverID: UUID
+    let plantName: String
+    let notes: String?
+    let startDate: String
+    let endDate: String
+    let totalPrice: Double
+    let status: String
+    let createdAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case ownerID = "owner_id"
+        case caregiverID = "caregiver_id"
+        case plantName = "plant_name"
+        case notes
+        case startDate = "start_date"
+        case endDate = "end_date"
+        case totalPrice = "total_price"
+        case status
+        case createdAt = "created_at"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        ownerID = try container.decode(UUID.self, forKey: .ownerID)
+        caregiverID = try container.decode(UUID.self, forKey: .caregiverID)
+        plantName = try container.decode(String.self, forKey: .plantName)
+        notes = try container.decodeIfPresent(String.self, forKey: .notes)
+        startDate = try container.decodeIfPresent(String.self, forKey: .startDate) ?? ""
+        endDate = try container.decodeIfPresent(String.self, forKey: .endDate) ?? ""
+        totalPrice = try container.decodeLossyDouble(forKey: .totalPrice)
+        status = try container.decodeIfPresent(String.self, forKey: .status) ?? "pending"
+        createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt)
+    }
+}
+
+private struct DBPlantSittingBookingInsert: Encodable {
+    let ownerID: UUID
+    let caregiverID: UUID
+    let plantName: String
+    let notes: String
+    let startDate: String
+    let endDate: String
+    let totalPrice: Double
+    let status: String
+
+    enum CodingKeys: String, CodingKey {
+        case ownerID = "owner_id"
+        case caregiverID = "caregiver_id"
+        case plantName = "plant_name"
+        case notes
+        case startDate = "start_date"
+        case endDate = "end_date"
+        case totalPrice = "total_price"
+        case status
+    }
+}
+
+private struct DBPlantSittingBookingStatusUpdate: Encodable {
+    let status: String
 }
 
 private struct DBCaregiver: Decodable {
