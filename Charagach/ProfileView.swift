@@ -15,12 +15,11 @@ import UIKit
 struct ProfileView: View {
     @ObservedObject var authViewModel: AuthViewModel
     @StateObject private var viewModel = ProfileViewModel()
+    @Environment(\.openURL) private var openURL
 
     @State private var showSignOutConfirm = false
     @State private var showEditProfile = false
     @State private var showMyListings = false
-    @State private var showComingSoon = false
-    @State private var comingSoonText = ""
     @State private var showProfileError = false
     @State private var profileErrorText = ""
 
@@ -85,11 +84,11 @@ struct ProfileView: View {
                             ProfileMenuItem(icon: "tag.fill", iconColor: .green, label: "My Listings") {
                                 showMyListings = true
                             }
-                            ProfileMenuItem(icon: "calendar.badge.checkmark", iconColor: .blue, label: "My Bookings") {
-                                showPlaceholder("Your booking history screen will be here.")
+                            ProfileMenuNavigationItem(icon: "calendar.badge.checkmark", iconColor: .blue, label: "My Bookings") {
+                                ProfileBookingsView(authViewModel: authViewModel)
                             }
-                            ProfileMenuItem(icon: "star.fill", iconColor: .yellow, label: "My Reviews", showDivider: false) {
-                                showPlaceholder("Your reviews screen will be here.")
+                            ProfileMenuNavigationItem(icon: "star.fill", iconColor: .yellow, label: "My Reviews", showDivider: false) {
+                                ProfileReviewsView(authViewModel: authViewModel)
                             }
                         }
 
@@ -97,20 +96,20 @@ struct ProfileView: View {
                             ProfileMenuItem(icon: "person.fill", iconColor: .purple, label: "Edit Profile") {
                                 showEditProfile = true
                             }
-                            ProfileMenuItem(icon: "bell.fill", iconColor: .orange, label: "Notifications") {
-                                showPlaceholder("Notifications settings will be here.")
+                            ProfileMenuNavigationItem(icon: "bell.fill", iconColor: .orange, label: "Notifications") {
+                                NotificationsSettingsView()
                             }
-                            ProfileMenuItem(icon: "lock.fill", iconColor: .gray, label: "Privacy & Security", showDivider: false) {
-                                showPlaceholder("Privacy and security settings will be here.")
+                            ProfileMenuNavigationItem(icon: "lock.fill", iconColor: .gray, label: "Privacy & Security", showDivider: false) {
+                                PrivacySecurityView(authViewModel: authViewModel, userEmail: userEmail)
                             }
                         }
 
                         ProfileMenuSection(title: "Support") {
-                            ProfileMenuItem(icon: "questionmark.circle.fill", iconColor: .teal, label: "Help Center") {
-                                showPlaceholder("Help Center will be available soon.")
+                            ProfileMenuNavigationItem(icon: "questionmark.circle.fill", iconColor: .teal, label: "Help Center") {
+                                HelpCenterView()
                             }
                             ProfileMenuItem(icon: "envelope.fill", iconColor: .indigo, label: "Contact Us", showDivider: false) {
-                                showPlaceholder("Email us at support@charagach.app")
+                                openSupportEmail()
                             }
                         }
                     }
@@ -162,16 +161,16 @@ struct ProfileView: View {
         } message: {
             Text(profileErrorText)
         }
-        .alert("Coming Soon", isPresented: $showComingSoon) {
-            Button("OK") {}
-        } message: {
-            Text(comingSoonText)
-        }
     }
 
-    private func showPlaceholder(_ message: String) {
-        comingSoonText = message
-        showComingSoon = true
+    private func openSupportEmail() {
+        guard let url = URL(string: "mailto:support@charagach.app") else {
+            profileErrorText = "Could not open the support email address."
+            showProfileError = true
+            return
+        }
+
+        openURL(url)
     }
 }
 
@@ -219,6 +218,34 @@ private struct ProfileMenuSection<Content: View>: View {
 
 // MARK: - Profile Menu Item
 
+private struct ProfileMenuRowLabel: View {
+    let icon: String
+    let iconColor: Color
+    let label: String
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(iconColor.opacity(0.15))
+                    .frame(width: 34, height: 34)
+                Image(systemName: icon)
+                    .font(.system(size: 15))
+                    .foregroundStyle(iconColor)
+            }
+            Text(label)
+                .font(.body)
+                .foregroundStyle(.primary)
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+}
+
 private struct ProfileMenuItem: View {
     let icon: String
     let iconColor: Color
@@ -230,25 +257,38 @@ private struct ProfileMenuItem: View {
         Button {
             action()
         } label: {
-            HStack(spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(iconColor.opacity(0.15))
-                        .frame(width: 34, height: 34)
-                    Image(systemName: icon)
-                        .font(.system(size: 15))
-                        .foregroundStyle(iconColor)
-                }
-                Text(label)
-                    .font(.body)
-                    .foregroundStyle(.primary)
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            ProfileMenuRowLabel(icon: icon, iconColor: iconColor, label: label)
+        }
+        if showDivider {
+            Divider().padding(.leading, 64)
+        }
+    }
+}
+
+private struct ProfileMenuNavigationItem<Destination: View>: View {
+    let icon: String
+    let iconColor: Color
+    let label: String
+    var showDivider: Bool = true
+    let destination: Destination
+
+    init(
+        icon: String,
+        iconColor: Color,
+        label: String,
+        showDivider: Bool = true,
+        @ViewBuilder destination: () -> Destination
+    ) {
+        self.icon = icon
+        self.iconColor = iconColor
+        self.label = label
+        self.showDivider = showDivider
+        self.destination = destination()
+    }
+
+    var body: some View {
+        NavigationLink(destination: destination) {
+            ProfileMenuRowLabel(icon: icon, iconColor: iconColor, label: label)
         }
         if showDivider {
             Divider().padding(.leading, 64)
@@ -434,5 +474,760 @@ private struct EditableAvatarView: View {
                     .font(.headline.weight(.bold))
                     .foregroundStyle(.green)
             }
+    }
+}
+
+// MARK: - Bookings
+
+private struct ProfileBookingsView: View {
+    @ObservedObject var authViewModel: AuthViewModel
+    @StateObject private var dataStore = SupabaseDataStore()
+
+    @State private var bookings: [PlantSittingBooking] = []
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+    @State private var selectedFilter = BookingListFilter.all
+
+    private var currentUserID: UUID? {
+        authViewModel.session?.user.id
+    }
+
+    private var filteredBookings: [PlantSittingBooking] {
+        guard let currentUserID else { return bookings }
+
+        switch selectedFilter {
+        case .all:
+            return bookings
+        case .owner:
+            return bookings.filter { $0.role(for: currentUserID) == .owner }
+        case .caregiver:
+            return bookings.filter { $0.role(for: currentUserID) == .caregiver }
+        }
+    }
+
+    private var showsFilter: Bool {
+        guard let currentUserID else { return false }
+        let hasOwnerBookings = bookings.contains { $0.role(for: currentUserID) == .owner }
+        let hasCaregiverBookings = bookings.contains { $0.role(for: currentUserID) == .caregiver }
+        return hasOwnerBookings && hasCaregiverBookings
+    }
+
+    var body: some View {
+        Group {
+            if isLoading {
+                ProgressView("Loading bookings...")
+                    .tint(.green)
+            } else if filteredBookings.isEmpty {
+                ProfileEmptyState(
+                    icon: "calendar.badge.exclamationmark",
+                    title: "No Bookings Yet",
+                    message: "Bookings you make or manage will appear here."
+                )
+            } else {
+                List {
+                    if showsFilter {
+                        Section {
+                            Picker("Booking View", selection: $selectedFilter) {
+                                ForEach(BookingListFilter.allCases) { filter in
+                                    Text(filter.rawValue).tag(filter)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                        }
+                    }
+
+                    ForEach(filteredBookings) { booking in
+                        if let currentUserID {
+                            BookingRow(
+                                booking: booking,
+                                currentUserID: currentUserID,
+                                onStatusChange: { status in
+                                    Task { await updateStatus(bookingID: booking.id, status: status) }
+                                }
+                            )
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                        }
+                    }
+                }
+                .listStyle(.plain)
+                .refreshable {
+                    await refresh()
+                }
+            }
+        }
+        .navigationTitle("My Bookings")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    Task { await refresh() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+            }
+        }
+        .task {
+            await refresh()
+        }
+        .alert("Bookings", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("OK") { errorMessage = nil }
+        } message: {
+            Text(errorMessage ?? "")
+        }
+    }
+
+    private func refresh() async {
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            bookings = try await dataStore.loadMyBookings(session: authViewModel.session)
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func updateStatus(bookingID: UUID, status: BookingStatus) async {
+        do {
+            try await dataStore.updateBookingStatus(bookingID: bookingID, status: status, session: authViewModel.session)
+            await refresh()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+private enum BookingListFilter: String, CaseIterable, Identifiable {
+    case all = "All"
+    case owner = "As Owner"
+    case caregiver = "As Caregiver"
+
+    var id: String { rawValue }
+}
+
+private struct BookingRow: View {
+    let booking: PlantSittingBooking
+    let currentUserID: UUID
+    let onStatusChange: (BookingStatus) -> Void
+
+    private var role: BookingRole {
+        booking.role(for: currentUserID) ?? .owner
+    }
+
+    private var counterpartLabel: String {
+        role == .owner ? "Caregiver" : "Owner"
+    }
+
+    private var actionStatus: BookingStatus? {
+        switch (role, booking.status) {
+        case (.owner, .pending): return .cancelled
+        case (.caregiver, .pending): return .confirmed
+        case (.caregiver, .confirmed): return .completed
+        default: return nil
+        }
+    }
+
+    private var actionTitle: String {
+        switch actionStatus {
+        case .cancelled:
+            return "Cancel Booking"
+        case .confirmed:
+            return "Confirm Booking"
+        case .completed:
+            return "Mark Completed"
+        default:
+            return ""
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(booking.displayPlantName)
+                        .font(.headline)
+                    Text("\(counterpartLabel): \(booking.counterpartName(for: currentUserID))")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                BookingStatusBadge(status: booking.status)
+            }
+
+            HStack(spacing: 10) {
+                Label(role.rawValue, systemImage: role == .owner ? "person.fill" : "hands.sparkles.fill")
+                Label(
+                    "\(booking.startDate.formatted(date: .abbreviated, time: .omitted)) - \(booking.endDate.formatted(date: .abbreviated, time: .omitted))",
+                    systemImage: "calendar"
+                )
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            if !booking.notes.isEmpty {
+                Text(booking.notes)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack {
+                Text("Total")
+                    .font(.subheadline.weight(.medium))
+                Spacer()
+                Text("BDT \(Int(booking.totalPrice))")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.green)
+            }
+
+            if let actionStatus {
+                Button(actionTitle, role: actionStatus == .cancelled ? .destructive : nil) {
+                    onStatusChange(actionStatus)
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+        .padding(16)
+        .background(.background, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(.green.opacity(0.08), lineWidth: 1)
+        )
+    }
+}
+
+private struct BookingStatusBadge: View {
+    let status: BookingStatus
+
+    var body: some View {
+        Text(status.title)
+            .font(.caption.weight(.semibold))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(status.color.opacity(0.12), in: Capsule())
+            .foregroundStyle(status.color)
+    }
+}
+
+// MARK: - Reviews
+
+private struct ProfileReviewsView: View {
+    @ObservedObject var authViewModel: AuthViewModel
+    @StateObject private var dataStore = SupabaseDataStore()
+
+    @State private var reviewCenter = ReviewCenterData.empty
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+    @State private var selectedBookingForReview: PlantSittingBooking?
+
+    var body: some View {
+        ScrollView {
+            if isLoading {
+                ProgressView("Loading reviews...")
+                    .tint(.green)
+                    .padding(.top, 40)
+            } else if reviewCenter.receivedSummaryCount == 0 &&
+                        reviewCenter.pending.isEmpty &&
+                        reviewCenter.received.isEmpty &&
+                        reviewCenter.given.isEmpty {
+                ProfileEmptyState(
+                    icon: "star.bubble",
+                    title: "No Reviews Yet",
+                    message: "Completed bookings and received feedback will appear here."
+                )
+                .padding(.top, 40)
+            } else {
+                VStack(alignment: .leading, spacing: 20) {
+                    if reviewCenter.receivedSummaryCount > 0 {
+                        ReviewSummaryCard(
+                            averageRating: reviewCenter.receivedSummaryRating,
+                            reviewCount: reviewCenter.receivedSummaryCount
+                        )
+                    }
+
+                    if !reviewCenter.pending.isEmpty {
+                        ReviewSection(title: "Pending Feedback") {
+                            ForEach(reviewCenter.pending) { booking in
+                                PendingReviewCard(booking: booking) {
+                                    selectedBookingForReview = booking
+                                }
+                            }
+                        }
+                    }
+
+                    if !reviewCenter.received.isEmpty {
+                        ReviewSection(title: "Reviews You Received") {
+                            ForEach(reviewCenter.received) { review in
+                                ReviewRow(
+                                    title: review.reviewerName,
+                                    subtitle: review.plantName.isEmpty ? "Plant sitting review" : review.plantName,
+                                    rating: review.rating,
+                                    comment: review.comment,
+                                    date: review.createdAt
+                                )
+                            }
+                        }
+                    }
+
+                    if !reviewCenter.given.isEmpty {
+                        ReviewSection(title: "Reviews You Wrote") {
+                            ForEach(reviewCenter.given) { review in
+                                ReviewRow(
+                                    title: review.caregiverName,
+                                    subtitle: review.plantName.isEmpty ? "Plant sitting review" : review.plantName,
+                                    rating: review.rating,
+                                    comment: review.comment,
+                                    date: review.createdAt
+                                )
+                            }
+                        }
+                    }
+                }
+                .padding()
+            }
+        }
+        .navigationTitle("My Reviews")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    Task { await refresh() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+            }
+        }
+        .task {
+            await refresh()
+        }
+        .refreshable {
+            await refresh()
+        }
+        .sheet(item: $selectedBookingForReview) { booking in
+            LeaveReviewSheet(authViewModel: authViewModel, booking: booking) {
+                await refresh()
+            }
+        }
+        .alert("Reviews", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("OK") { errorMessage = nil }
+        } message: {
+            Text(errorMessage ?? "")
+        }
+    }
+
+    private func refresh() async {
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            reviewCenter = try await dataStore.loadReviewCenter(session: authViewModel.session)
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+private struct ReviewSummaryCard: View {
+    let averageRating: Double
+    let reviewCount: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Your Caregiver Rating")
+                .font(.headline)
+            HStack(alignment: .lastTextBaseline, spacing: 12) {
+                Text(String(format: "%.1f", averageRating))
+                    .font(.system(size: 36, weight: .bold))
+                    .foregroundStyle(.green)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 4) {
+                        ForEach(0..<5, id: \.self) { index in
+                            Image(systemName: Double(index) < averageRating.rounded(.down) ? "star.fill" : "star")
+                                .foregroundStyle(.yellow)
+                        }
+                    }
+                    Text("\(reviewCount) total review\(reviewCount == 1 ? "" : "s")")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(18)
+        .background(.green.opacity(0.08), in: RoundedRectangle(cornerRadius: 18))
+    }
+}
+
+private struct ReviewSection<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.headline)
+            content
+        }
+    }
+}
+
+private struct PendingReviewCard: View {
+    let booking: PlantSittingBooking
+    let onReview: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(booking.displayPlantName)
+                .font(.headline)
+            Text("Caregiver: \(booking.caregiverName)")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Text("\(booking.startDate.formatted(date: .abbreviated, time: .omitted)) - \(booking.endDate.formatted(date: .abbreviated, time: .omitted))")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Button("Leave Review") {
+                onReview()
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.green)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(.background, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(.green.opacity(0.08), lineWidth: 1)
+        )
+    }
+}
+
+private struct ReviewRow: View {
+    let title: String
+    let subtitle: String
+    let rating: Double
+    let comment: String
+    let date: Date?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.headline)
+                    Text(subtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: 4) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "star.fill")
+                            .foregroundStyle(.yellow)
+                        Text(String(format: "%.1f", rating))
+                            .fontWeight(.semibold)
+                    }
+                    if let date {
+                        Text(date.formatted(date: .abbreviated, time: .omitted))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            Text(comment.isEmpty ? "No written comment." : comment)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(.background, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(.green.opacity(0.08), lineWidth: 1)
+        )
+    }
+}
+
+private struct LeaveReviewSheet: View {
+    @ObservedObject var authViewModel: AuthViewModel
+    @StateObject private var dataStore = SupabaseDataStore()
+    @Environment(\.dismiss) private var dismiss
+
+    let booking: PlantSittingBooking
+    let onSubmitted: () async -> Void
+
+    @State private var rating = 5
+    @State private var comment = ""
+    @State private var isSaving = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Booking") {
+                    Text(booking.displayPlantName)
+                    Text(booking.caregiverName)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section("Rating") {
+                    HStack {
+                        Spacer()
+                        ForEach(1...5, id: \.self) { star in
+                            Button {
+                                rating = star
+                            } label: {
+                                Image(systemName: star <= rating ? "star.fill" : "star")
+                                    .font(.title2)
+                                    .foregroundStyle(.yellow)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        Spacer()
+                    }
+                }
+
+                Section("Comment") {
+                    TextField("Share your experience", text: $comment, axis: .vertical)
+                        .lineLimit(4...7)
+                }
+
+                if let errorMessage {
+                    Section {
+                        Text(errorMessage)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
+            .navigationTitle("Leave Review")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Submit") {
+                        Task { await submitReview() }
+                    }
+                    .fontWeight(.semibold)
+                    .disabled(isSaving)
+                }
+            }
+        }
+    }
+
+    private func submitReview() async {
+        isSaving = true
+        defer { isSaving = false }
+
+        do {
+            try await dataStore.submitReview(
+                NewReviewInput(
+                    bookingID: booking.id,
+                    caregiverID: booking.caregiverID,
+                    rating: rating,
+                    comment: comment
+                ),
+                session: authViewModel.session
+            )
+            await onSubmitted()
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+// MARK: - Notifications
+
+private struct NotificationsSettingsView: View {
+    @AppStorage("notifications.booking_updates") private var bookingUpdates = true
+    @AppStorage("notifications.review_activity") private var reviewActivity = true
+    @AppStorage("notifications.marketing") private var marketing = false
+    @AppStorage("notifications.daily_tips") private var dailyTips = true
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        Form {
+            Section("Alerts") {
+                Toggle("Booking updates", isOn: $bookingUpdates)
+                Toggle("Review activity", isOn: $reviewActivity)
+                Toggle("Daily care tips", isOn: $dailyTips)
+                Toggle("Offers and announcements", isOn: $marketing)
+            }
+
+            Section("System") {
+                Button("Open App Notification Settings") {
+                    openSettings()
+                }
+                Text("These preferences are stored on this device. Use your iPhone settings to manage push permissions.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .navigationTitle("Notifications")
+    }
+
+    private func openSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        openURL(url)
+    }
+}
+
+// MARK: - Privacy & Security
+
+private struct PrivacySecurityView: View {
+    @ObservedObject var authViewModel: AuthViewModel
+    let userEmail: String
+    @Environment(\.openURL) private var openURL
+
+    @State private var statusMessage = ""
+    @State private var showStatusMessage = false
+
+    var body: some View {
+        Form {
+            Section("Account") {
+                LabeledContent("Email") {
+                    Text(userEmail)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Section("Security") {
+                Button("Send Password Reset Email") {
+                    Task { await sendPasswordReset() }
+                }
+                Button("Open App Settings") {
+                    openSettings()
+                }
+            }
+
+            Section("Privacy") {
+                Text("Your profile currently shows your name, avatar, city, listing counts, booking activity, and caregiver activity inside the app.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Text("If you need help with account privacy or data access, contact support from the Help Center.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .navigationTitle("Privacy & Security")
+        .onDisappear {
+            authViewModel.errorMessage = nil
+            authViewModel.successMessage = nil
+        }
+        .alert("Security", isPresented: $showStatusMessage) {
+            Button("OK") {}
+        } message: {
+            Text(statusMessage)
+        }
+    }
+
+    private func sendPasswordReset() async {
+        authViewModel.errorMessage = nil
+        authViewModel.successMessage = nil
+        await authViewModel.sendPasswordReset(email: userEmail)
+        statusMessage = authViewModel.errorMessage ?? authViewModel.successMessage ?? "Request finished."
+        showStatusMessage = true
+    }
+
+    private func openSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        openURL(url)
+    }
+}
+
+// MARK: - Help Center
+
+private struct HelpCenterView: View {
+    @Environment(\.openURL) private var openURL
+
+    private let faqs: [HelpFAQ] = [
+        HelpFAQ(
+            question: "How do bookings work?",
+            answer: "Choose a caregiver, enter your plant details, pick your dates, and confirm the booking. The caregiver can then confirm or complete it from their bookings list."
+        ),
+        HelpFAQ(
+            question: "Where can I manage my listings?",
+            answer: "Open Profile, then choose My Listings. From there you can edit posts, change status, or delete a listing."
+        ),
+        HelpFAQ(
+            question: "How do reviews appear?",
+            answer: "After a completed booking, the plant owner can leave a review. Caregiver ratings are updated from those submitted reviews."
+        ),
+        HelpFAQ(
+            question: "How do I update my profile or sitter status?",
+            answer: "Use Edit Profile to update your personal details. If you enable plant sitting there, the app now keeps your caregiver profile in sync."
+        )
+    ]
+
+    var body: some View {
+        List {
+            Section("Quick Help") {
+                Button("Email Support") {
+                    openSupportEmail()
+                }
+                Link("Visit Supabase Project Dashboard", destination: URL(string: "https://supabase.com/dashboard")!)
+            }
+
+            Section("Frequently Asked Questions") {
+                ForEach(faqs) { faq in
+                    DisclosureGroup(faq.question) {
+                        Text(faq.answer)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 4)
+                    }
+                }
+            }
+
+            Section("Need More Help?") {
+                Text("For account issues, booking questions, or profile problems, email support@charagach.app.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .navigationTitle("Help Center")
+    }
+
+    private func openSupportEmail() {
+        guard let url = URL(string: "mailto:support@charagach.app") else { return }
+        openURL(url)
+    }
+}
+
+private struct HelpFAQ: Identifiable {
+    let id = UUID()
+    let question: String
+    let answer: String
+}
+
+// MARK: - Shared Empty State
+
+private struct ProfileEmptyState: View {
+    let icon: String
+    let title: String
+    let message: String
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 40))
+                .foregroundStyle(.secondary)
+            Text(title)
+                .font(.headline)
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(24)
     }
 }

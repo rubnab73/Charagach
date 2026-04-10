@@ -19,8 +19,6 @@ struct PlantSittingView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
-
-                    // ── Hero banner ────────────────────────────────────
                     ZStack(alignment: .leading) {
                         RoundedRectangle(cornerRadius: 18)
                             .fill(
@@ -30,6 +28,7 @@ struct PlantSittingView: View {
                                     endPoint: .bottomTrailing
                                 )
                             )
+
                         HStack {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text("Plant Sitting")
@@ -49,7 +48,6 @@ struct PlantSittingView: View {
                     }
                     .padding(.horizontal)
 
-                    // ── How it works ───────────────────────────────────
                     HStack(spacing: 0) {
                         HowItWorksStep(number: "1", icon: "magnifyingglass", label: "Browse\nCaregivers")
                         Divider().frame(height: 40)
@@ -60,7 +58,6 @@ struct PlantSittingView: View {
                     .background(.green.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
                     .padding(.horizontal)
 
-                    // ── Caregiver list ─────────────────────────────────
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
                             Text("Available Caregivers")
@@ -73,7 +70,7 @@ struct PlantSittingView: View {
                         .padding(.horizontal)
 
                         ForEach(dataStore.caregivers) { caregiver in
-                            NavigationLink(destination: CaregiverDetailView(caregiver: caregiver)) {
+                            NavigationLink(destination: CaregiverDetailView(caregiver: caregiver, authViewModel: authViewModel)) {
                                 CaregiverCard(caregiver: caregiver)
                             }
                             .buttonStyle(.plain)
@@ -258,8 +255,6 @@ struct CaregiverCard: View {
 
     var body: some View {
         HStack(spacing: 14) {
-
-            // Avatar with availability dot
             Circle()
                 .fill(caregiver.avatarColor.opacity(0.18))
                 .frame(width: 58, height: 58)
@@ -280,7 +275,7 @@ struct CaregiverCard: View {
                     Text(caregiver.name)
                         .font(.subheadline.weight(.semibold))
                     Spacer()
-                    Text("৳\(Int(caregiver.pricePerDay))/day")
+                    Text("BDT \(Int(caregiver.pricePerDay))/day")
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(.green)
                 }
@@ -294,7 +289,7 @@ struct CaregiverCard: View {
                     Text("(\(caregiver.reviewCount))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text("·")
+                    Text("|")
                         .foregroundStyle(.secondary)
                         .font(.caption)
                     Image(systemName: "mappin")
@@ -329,22 +324,29 @@ struct CaregiverCard: View {
 
 struct CaregiverDetailView: View {
     let caregiver: Caregiver
+    @ObservedObject var authViewModel: AuthViewModel
+    @StateObject private var dataStore = SupabaseDataStore()
 
+    @State private var plantName = ""
+    @State private var notes = ""
     @State private var startDate = Date()
     @State private var endDate = Calendar.current.date(byAdding: .day, value: 3, to: Date()) ?? Date()
     @State private var showBookingConfirm = false
     @State private var showBooked = false
+    @State private var isSavingBooking = false
+    @State private var bookingErrorMessage: String?
 
     private var nights: Int {
         max(1, Calendar.current.dateComponents([.day], from: startDate, to: endDate).day ?? 1)
     }
-    private var totalCost: Double { Double(nights) * caregiver.pricePerDay }
+
+    private var totalCost: Double {
+        Double(nights) * caregiver.pricePerDay
+    }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
-
-                // ── Avatar hero ────────────────────────────────────────
                 VStack(spacing: 12) {
                     Circle()
                         .fill(caregiver.avatarColor.opacity(0.18))
@@ -357,7 +359,8 @@ struct CaregiverDetailView: View {
                     Text(caregiver.name)
                         .font(.title2.bold())
                     HStack(spacing: 4) {
-                        Image(systemName: "star.fill").foregroundStyle(.yellow)
+                        Image(systemName: "star.fill")
+                            .foregroundStyle(.yellow)
                         Text(String(format: "%.1f", caregiver.rating))
                             .fontWeight(.semibold)
                         Text("(\(caregiver.reviewCount) reviews)")
@@ -366,12 +369,11 @@ struct CaregiverDetailView: View {
                     .font(.subheadline)
                     HStack(spacing: 8) {
                         Label(caregiver.location, systemImage: "mappin")
-                        Text("·")
+                        Text("|")
                         Label("\(caregiver.yearsExperience) yrs exp.", systemImage: "leaf")
                     }
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    // Availability
                     HStack(spacing: 6) {
                         Circle()
                             .fill(caregiver.isAvailable ? .green : .gray)
@@ -385,11 +387,10 @@ struct CaregiverDetailView: View {
 
                 Divider().padding(.horizontal)
 
-                // ── Bio ────────────────────────────────────────────────
                 VStack(alignment: .leading, spacing: 8) {
                     Text("About")
                         .font(.headline)
-                    Text(caregiver.bio)
+                    Text(caregiver.bio.isEmpty ? "This caregiver has not added a bio yet." : caregiver.bio)
                         .font(.body)
                         .foregroundStyle(.secondary)
                         .lineSpacing(4)
@@ -397,7 +398,6 @@ struct CaregiverDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal)
 
-                // ── Specialties ────────────────────────────────────────
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Specialties")
                         .font(.headline)
@@ -417,7 +417,19 @@ struct CaregiverDetailView: View {
 
                 Divider().padding(.horizontal)
 
-                // ── Booking date picker ────────────────────────────────
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("Your Plants")
+                        .font(.headline)
+                    TextField("Plant name", text: $plantName)
+                        .textFieldStyle(.roundedBorder)
+                    TextField("Care notes (optional)", text: $notes, axis: .vertical)
+                        .textFieldStyle(.roundedBorder)
+                        .lineLimit(3...5)
+                }
+                .padding(.horizontal)
+
+                Divider().padding(.horizontal)
+
                 VStack(alignment: .leading, spacing: 14) {
                     Text("Book a Stay")
                         .font(.headline)
@@ -426,19 +438,18 @@ struct CaregiverDetailView: View {
                 }
                 .padding(.horizontal)
 
-                // ── Cost summary ───────────────────────────────────────
                 VStack(spacing: 10) {
                     HStack {
-                        Text("৳\(Int(caregiver.pricePerDay)) × \(nights) day\(nights == 1 ? "" : "s")")
+                        Text("BDT \(Int(caregiver.pricePerDay)) x \(nights) day\(nights == 1 ? "" : "s")")
                         Spacer()
-                        Text("৳\(Int(totalCost))")
+                        Text("BDT \(Int(totalCost))")
                     }
                     .font(.subheadline)
                     Divider()
                     HStack {
                         Text("Total").fontWeight(.semibold)
                         Spacer()
-                        Text("৳\(Int(totalCost))")
+                        Text("BDT \(Int(totalCost))")
                             .fontWeight(.bold)
                             .foregroundStyle(.green)
                     }
@@ -447,34 +458,93 @@ struct CaregiverDetailView: View {
                 .background(.green.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
                 .padding(.horizontal)
 
-                // ── Book button ────────────────────────────────────────
                 Button {
-                    if caregiver.isAvailable { showBookingConfirm = true }
+                    startBookingFlow()
                 } label: {
-                    Text(caregiver.isAvailable ? "Confirm Booking" : "Unavailable")
-                        .fontWeight(.semibold)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 4)
+                    HStack(spacing: 8) {
+                        if isSavingBooking {
+                            ProgressView()
+                                .tint(.white)
+                                .scaleEffect(0.85)
+                        }
+                        Text(caregiver.isAvailable ? "Confirm Booking" : "Unavailable")
+                            .fontWeight(.semibold)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 4)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(caregiver.isAvailable ? .green : .gray)
-                .disabled(!caregiver.isAvailable)
+                .disabled(!caregiver.isAvailable || isSavingBooking)
                 .padding(.horizontal)
                 .padding(.bottom, 24)
             }
         }
         .navigationTitle("Caregiver Profile")
         .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: startDate) { newValue in
+            if endDate < newValue {
+                endDate = newValue
+            }
+        }
         .confirmationDialog("Confirm Booking", isPresented: $showBookingConfirm, titleVisibility: .visible) {
-            Button("Book for ৳\(Int(totalCost))") { showBooked = true }
+            Button("Book for BDT \(Int(totalCost))") {
+                Task { await confirmBooking() }
+            }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Book \(caregiver.name) from \(startDate.formatted(date: .abbreviated, time: .omitted)) to \(endDate.formatted(date: .abbreviated, time: .omitted))?")
         }
-        .alert("Booking Confirmed! 🌿", isPresented: $showBooked) {
+        .alert("Plant Sitting", isPresented: Binding(
+            get: { bookingErrorMessage != nil },
+            set: { if !$0 { bookingErrorMessage = nil } }
+        )) {
+            Button("OK") { bookingErrorMessage = nil }
+        } message: {
+            Text(bookingErrorMessage ?? "")
+        }
+        .alert("Booking Confirmed", isPresented: $showBooked) {
             Button("Great!") {}
         } message: {
             Text("\(caregiver.name) will care for your plants. You will receive a confirmation shortly.")
+        }
+    }
+
+    private func startBookingFlow() {
+        guard caregiver.isAvailable else { return }
+        guard authViewModel.session != nil else {
+            bookingErrorMessage = "Please sign in first."
+            return
+        }
+        guard !plantName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            bookingErrorMessage = "Please enter your plant name before booking."
+            return
+        }
+
+        showBookingConfirm = true
+    }
+
+    private func confirmBooking() async {
+        isSavingBooking = true
+        defer { isSavingBooking = false }
+
+        do {
+            try await dataStore.createBooking(
+                NewBookingInput(
+                    caregiverID: caregiver.id,
+                    plantName: plantName,
+                    notes: notes,
+                    startDate: startDate,
+                    endDate: endDate,
+                    totalPrice: totalCost
+                ),
+                session: authViewModel.session
+            )
+            plantName = ""
+            notes = ""
+            showBooked = true
+        } catch {
+            bookingErrorMessage = error.localizedDescription
         }
     }
 }

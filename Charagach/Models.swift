@@ -126,6 +126,126 @@ struct Caregiver: Identifiable {
     }
 }
 
+enum BookingStatus: String {
+    case pending = "pending"
+    case confirmed = "confirmed"
+    case completed = "completed"
+    case cancelled = "cancelled"
+
+    var title: String {
+        switch self {
+        case .pending: return "Pending"
+        case .confirmed: return "Confirmed"
+        case .completed: return "Completed"
+        case .cancelled: return "Cancelled"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .pending: return .orange
+        case .confirmed: return .blue
+        case .completed: return .green
+        case .cancelled: return .red
+        }
+    }
+}
+
+enum BookingRole: String, CaseIterable {
+    case owner = "Owner"
+    case caregiver = "Caregiver"
+}
+
+struct PlantSittingBooking: Identifiable {
+    let id: UUID
+    let ownerID: UUID
+    let caregiverID: UUID
+    let ownerName: String
+    let caregiverName: String
+    let plantName: String
+    let notes: String
+    let startDate: Date
+    let endDate: Date
+    let totalPrice: Double
+    let status: BookingStatus
+    let createdAt: Date?
+
+    init(
+        id: UUID,
+        ownerID: UUID,
+        caregiverID: UUID,
+        ownerName: String,
+        caregiverName: String,
+        plantName: String,
+        notes: String,
+        startDate: Date,
+        endDate: Date,
+        totalPrice: Double,
+        status: BookingStatus,
+        createdAt: Date?
+    ) {
+        self.id = id
+        self.ownerID = ownerID
+        self.caregiverID = caregiverID
+        self.ownerName = ownerName
+        self.caregiverName = caregiverName
+        self.plantName = plantName
+        self.notes = notes
+        self.startDate = startDate
+        self.endDate = endDate
+        self.totalPrice = totalPrice
+        self.status = status
+        self.createdAt = createdAt
+    }
+
+    var displayPlantName: String {
+        plantName.isEmpty ? "Plant sitting booking" : plantName
+    }
+
+    var stayLength: Int {
+        max(1, Calendar.current.dateComponents([.day], from: startDate, to: endDate).day ?? 1)
+    }
+
+    func role(for userID: UUID) -> BookingRole? {
+        if ownerID == userID { return .owner }
+        if caregiverID == userID { return .caregiver }
+        return nil
+    }
+
+    func counterpartName(for userID: UUID) -> String {
+        ownerID == userID ? caregiverName : ownerName
+    }
+}
+
+struct CaregiverReviewEntry: Identifiable {
+    let id: UUID
+    let bookingID: UUID
+    let caregiverID: UUID
+    let reviewerID: UUID
+    let caregiverName: String
+    let reviewerName: String
+    let plantName: String
+    let rating: Double
+    let comment: String
+    let createdAt: Date?
+}
+
+struct ReviewCenterData {
+    let receivedSummaryRating: Double
+    let receivedSummaryCount: Int
+    let pending: [PlantSittingBooking]
+    let received: [CaregiverReviewEntry]
+    let given: [CaregiverReviewEntry]
+
+    static let empty = ReviewCenterData(
+        receivedSummaryRating: 0,
+        receivedSummaryCount: 0,
+        pending: [],
+        received: [],
+        given: []
+    )
+}
+
 // MARK: - Plant Care Tip
 
 struct PlantCareTip: Identifiable {

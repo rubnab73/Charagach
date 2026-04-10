@@ -40,6 +40,22 @@ struct NewCaregiverInput {
     let isAvailable: Bool
 }
 
+struct NewBookingInput {
+    let caregiverID: UUID
+    let plantName: String
+    let notes: String
+    let startDate: Date
+    let endDate: Date
+    let totalPrice: Double
+}
+
+struct NewReviewInput {
+    let bookingID: UUID
+    let caregiverID: UUID
+    let rating: Int
+    let comment: String
+}
+
 @MainActor
 final class SupabaseDataStore: ObservableObject {
     @Published var listings: [PlantListing] = []
@@ -208,13 +224,14 @@ final class SupabaseDataStore: ObservableObject {
 
             let profileResponse = try await supabase.database
                 .from("profiles")
-                .select("id, full_name, city")
+                .select("id, full_name, city, is_caregiver")
                 .execute()
             let dbProfiles: [DBCaregiverProfile] = try decodeArray(from: profileResponse.data, decoder: decoder)
             let profileByID = Dictionary(uniqueKeysWithValues: dbProfiles.map { ($0.id, $0) })
 
-            let mapped = dbCaregivers.map { row in
+            let mapped = dbCaregivers.compactMap { row in
                 let profile = profileByID[row.id]
+                guard profile?.isCaregiver ?? true else { return nil }
                 return Caregiver(
                     id: row.id,
                     name: profile?.fullName?.isEmpty == false ? profile!.fullName! : "Caregiver",
@@ -317,6 +334,246 @@ final class SupabaseDataStore: ObservableObject {
         await loadCaregivers()
     }
 
+    func createBooking(_ input: NewBookingInput, session: Session?) async throws {
+        guard let userID = session?.user.id else {
+            throw DataStoreError.notAuthenticated
+        }
+
+        let trimmedPlantName = input.plantName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedPlantName.isEmpty else {
+            throw DataStoreError.invalidBooking("Please enter your plant name.")
+        }
+
+        guard input.endDate >= input.startDate else {
+            throw DataStoreError.invalidBooking("Pick-up date must be on or after the drop-off date.")
+        }
+
+        let payload = DBPlantSittingBookingInsert(
+            ownerID: userID,
+            caregiverID: input.caregiverID,
+            plantName: trimmedPlantName,
+            notes: input.notes.trimmingCharacters(in: .whitespacesAndNewlines),
+            startDate: Self.dateOnlyFormatter.string(from: input.startDate),
+            endDate: Self.dateOnlyFormatter.string(from: input.endDate),
+            totalPrice: input.totalPrice,
+            status: BookingStatus.pending.rawValue
+        )
+
+        _ = try await supabase.database
+            .from("plant_sitting_bookings")
+            .insert(payload)
+            .execute()
+    }
+
+    func loadMyBookings(session: Session?) async throws -> [PlantSittingBooking] {
+        guard let userID = session?.user.id else {
+            throw DataStoreError.notAuthenticated
+        }
+
+        let decoder = JSONDecoder()
+
+        let ownerResponse = try await supabase.database
+            .from("plant_sitting_bookings")
+            .select()
+            .eq("owner_id", value: userID.uuidString)
+            .order("start_date", ascending: false)
+            .execute()
+
+        let caregiverResponse = try await supabase.database
+            .from("plant_sitting_bookings")
+            .select()
+            .eq("caregiver_id", value: userID.uuidString)
+            .order("start_date", ascending: false)
+            .execute()
+
+        let ownerRows: [DBPlantSittingBooking] = try decodeArray(from: ownerResponse.data, decoder: decoder)
+        let caregiverRows: [DBPlantSittingBooking] = try decodeArray(from: caregiverResponse.data, decoder: decoder)
+        let bookingRows = uniqueBookings(from: ownerRows + caregiverRows)
+
+        let profileResponse = try await supabase.database
+            .from("profiles")
+            .select("id, full_name, city, is_caregiver")
+            .execute()
+        let profileRows: [DBCaregiverProfile] = try decodeArray(from: profileResponse.data, decoder: decoder)
+        let profileByID = Dictionary(uniqueKeysWithValues: profileRows.map { ($0.id, $0) })
+
+        return bookingRows.map { row in
+            PlantSittingBooking(
+                id: row.id,
+                ownerID: row.ownerID,
+                caregiverID: row.caregiverID,
+                ownerName: profileByID[row.ownerID]?.fullName?.isEmpty == false ? profileByID[row.ownerID]!.fullName! : "Owner",
+                caregiverName: profileByID[row.caregiverID]?.fullName?.isEmpty == false ? profileByID[row.caregiverID]!.fullName! : "Caregiver",
+                plantName: row.plantName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+                notes: row.notes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+                startDate: Self.parseDateOnly(row.startDate),
+                endDate: Self.parseDateOnly(row.endDate),
+                totalPrice: row.totalPrice,
+                status: BookingStatus(rawValue: row.status.lowercased()) ?? .pending,
+                createdAt: Self.parseTimestamp(row.createdAt)
+            )
+        }
+        .sorted { lhs, rhs in
+            if lhs.startDate == rhs.startDate {
+                return (lhs.createdAt ?? lhs.startDate) > (rhs.createdAt ?? rhs.startDate)
+            }
+            return lhs.startDate > rhs.startDate
+        }
+    }
+
+    func updateBookingStatus(bookingID: UUID, status: BookingStatus, session: Session?) async throws {
+        guard session != nil else {
+            throw DataStoreError.notAuthenticated
+        }
+
+        let payload = DBBookingStatusUpdate(status: status.rawValue)
+
+        _ = try await supabase.database
+            .from("plant_sitting_bookings")
+            .update(payload)
+            .eq("id", value: bookingID.uuidString)
+            .execute()
+    }
+
+    func loadReviewCenter(session: Session?) async throws -> ReviewCenterData {
+        guard let userID = session?.user.id else {
+            throw DataStoreError.notAuthenticated
+        }
+
+        do {
+            let decoder = JSONDecoder()
+
+            let givenResponse = try await supabase.database
+                .from("caregiver_reviews")
+                .select()
+                .eq("reviewer_id", value: userID.uuidString)
+                .order("created_at", ascending: false)
+                .execute()
+
+            let receivedResponse = try await supabase.database
+                .from("caregiver_reviews")
+                .select()
+                .eq("caregiver_id", value: userID.uuidString)
+                .order("created_at", ascending: false)
+                .execute()
+
+            let givenRows: [DBCaregiverReviewEntry] = try decodeArray(from: givenResponse.data, decoder: decoder)
+            let receivedRows: [DBCaregiverReviewEntry] = try decodeArray(from: receivedResponse.data, decoder: decoder)
+
+            let bookingResponse = try await supabase.database
+                .from("plant_sitting_bookings")
+                .select()
+                .eq("owner_id", value: userID.uuidString)
+                .order("start_date", ascending: false)
+                .execute()
+
+            let bookingRows: [DBPlantSittingBooking] = try decodeArray(from: bookingResponse.data, decoder: decoder)
+
+            let profileResponse = try await supabase.database
+                .from("profiles")
+                .select("id, full_name, city, is_caregiver")
+                .execute()
+            let profileRows: [DBCaregiverProfile] = try decodeArray(from: profileResponse.data, decoder: decoder)
+            let profileByID = Dictionary(uniqueKeysWithValues: profileRows.map { ($0.id, $0) })
+
+            let summaryResponse = try await supabase.database
+                .from("caregivers")
+                .select("rating, review_count")
+                .eq("id", value: userID.uuidString)
+                .limit(1)
+                .execute()
+            let summaryRows: [DBCaregiverSummary] = try decodeArray(from: summaryResponse.data, decoder: decoder)
+
+            let givenReviewBookingIDs = Set(givenRows.map(\.bookingID))
+            let pending = bookingRows
+                .filter { $0.status.lowercased() == BookingStatus.completed.rawValue && !givenReviewBookingIDs.contains($0.id) }
+                .map { row in
+                    PlantSittingBooking(
+                        id: row.id,
+                        ownerID: row.ownerID,
+                        caregiverID: row.caregiverID,
+                        ownerName: profileByID[row.ownerID]?.fullName?.isEmpty == false ? profileByID[row.ownerID]!.fullName! : "Owner",
+                        caregiverName: profileByID[row.caregiverID]?.fullName?.isEmpty == false ? profileByID[row.caregiverID]!.fullName! : "Caregiver",
+                        plantName: row.plantName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+                        notes: row.notes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+                        startDate: Self.parseDateOnly(row.startDate),
+                        endDate: Self.parseDateOnly(row.endDate),
+                        totalPrice: row.totalPrice,
+                        status: .completed,
+                        createdAt: Self.parseTimestamp(row.createdAt)
+                    )
+                }
+
+            let given = givenRows.map { row in
+                CaregiverReviewEntry(
+                    id: row.id,
+                    bookingID: row.bookingID,
+                    caregiverID: row.caregiverID,
+                    reviewerID: row.reviewerID,
+                    caregiverName: profileByID[row.caregiverID]?.fullName?.isEmpty == false ? profileByID[row.caregiverID]!.fullName! : "Caregiver",
+                    reviewerName: profileByID[row.reviewerID]?.fullName?.isEmpty == false ? profileByID[row.reviewerID]!.fullName! : "You",
+                    plantName: row.plantName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+                    rating: row.rating,
+                    comment: row.comment?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+                    createdAt: Self.parseTimestamp(row.createdAt)
+                )
+            }
+
+            let received = receivedRows.map { row in
+                CaregiverReviewEntry(
+                    id: row.id,
+                    bookingID: row.bookingID,
+                    caregiverID: row.caregiverID,
+                    reviewerID: row.reviewerID,
+                    caregiverName: profileByID[row.caregiverID]?.fullName?.isEmpty == false ? profileByID[row.caregiverID]!.fullName! : "You",
+                    reviewerName: profileByID[row.reviewerID]?.fullName?.isEmpty == false ? profileByID[row.reviewerID]!.fullName! : "Plant owner",
+                    plantName: row.plantName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+                    rating: row.rating,
+                    comment: row.comment?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+                    createdAt: Self.parseTimestamp(row.createdAt)
+                )
+            }
+
+            let summary = summaryRows.first
+            return ReviewCenterData(
+                receivedSummaryRating: summary?.rating ?? 0,
+                receivedSummaryCount: summary?.reviewCount ?? received.count,
+                pending: pending,
+                received: received,
+                given: given
+            )
+        } catch {
+            throw mapReviewFeatureError(error)
+        }
+    }
+
+    func submitReview(_ input: NewReviewInput, session: Session?) async throws {
+        guard let userID = session?.user.id else {
+            throw DataStoreError.notAuthenticated
+        }
+
+        guard (1...5).contains(input.rating) else {
+            throw DataStoreError.invalidReview("Please choose a rating between 1 and 5 stars.")
+        }
+
+        do {
+            let payload = DBCaregiverReviewInsert(
+                bookingID: input.bookingID,
+                caregiverID: input.caregiverID,
+                reviewerID: userID,
+                rating: Double(input.rating),
+                comment: input.comment.trimmingCharacters(in: .whitespacesAndNewlines)
+            )
+
+            _ = try await supabase.database
+                .from("caregiver_reviews")
+                .insert(payload)
+                .execute()
+        } catch {
+            throw mapReviewFeatureError(error)
+        }
+    }
+
     private static func iconName(for category: String) -> String {
         switch category {
         case PlantCategory.indoor.rawValue: return "leaf.fill"
@@ -352,6 +609,40 @@ final class SupabaseDataStore: ObservableObject {
         return max(1, diff)
     }
 
+    private static let dateOnlyFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+
+    private static func parseDateOnly(_ value: String) -> Date {
+        Self.dateOnlyFormatter.date(from: value) ?? Date()
+    }
+
+    private static func parseTimestamp(_ value: String?) -> Date? {
+        guard let value else { return nil }
+
+        let preciseFormatter = ISO8601DateFormatter()
+        preciseFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        return preciseFormatter.date(from: value) ?? ISO8601DateFormatter().date(from: value)
+    }
+
+    private func uniqueBookings(from rows: [DBPlantSittingBooking]) -> [DBPlantSittingBooking] {
+        Array(Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0) }).values)
+    }
+
+    private func mapReviewFeatureError(_ error: Error) -> Error {
+        let message = error.localizedDescription.lowercased()
+        if message.contains("caregiver_reviews") || message.contains("relation") {
+            return DataStoreError.reviewFeatureRequiresMigration
+        }
+        return error
+    }
+
     private func decodeArray<T: Decodable>(from data: Data, decoder: JSONDecoder) throws -> [T] {
         // Some responses may return an empty body. Treat it as no rows instead of throwing.
         guard !data.isEmpty else { return [] }
@@ -368,6 +659,9 @@ final class SupabaseDataStore: ObservableObject {
 enum DataStoreError: LocalizedError {
     case notAuthenticated
     case caregiverSaveFailed
+    case invalidBooking(String)
+    case invalidReview(String)
+    case reviewFeatureRequiresMigration
 
     var errorDescription: String? {
         switch self {
@@ -375,6 +669,12 @@ enum DataStoreError: LocalizedError {
             return "Please sign in first."
         case .caregiverSaveFailed:
             return "Could not save sitter profile. Please check your Supabase RLS policies and try again."
+        case .invalidBooking(let message):
+            return message
+        case .invalidReview(let message):
+            return message
+        case .reviewFeatureRequiresMigration:
+            return "The reviews feature needs the new Supabase migration before it can be used."
         }
     }
 }
@@ -584,11 +884,145 @@ private struct DBCaregiverProfile: Decodable {
     let id: UUID
     let fullName: String?
     let city: String?
+    let isCaregiver: Bool?
 
     enum CodingKeys: String, CodingKey {
         case id
         case fullName = "full_name"
         case city
+        case isCaregiver = "is_caregiver"
+    }
+}
+
+private struct DBPlantSittingBookingInsert: Encodable {
+    let ownerID: UUID
+    let caregiverID: UUID
+    let plantName: String
+    let notes: String
+    let startDate: String
+    let endDate: String
+    let totalPrice: Double
+    let status: String
+
+    enum CodingKeys: String, CodingKey {
+        case ownerID = "owner_id"
+        case caregiverID = "caregiver_id"
+        case plantName = "plant_name"
+        case notes
+        case startDate = "start_date"
+        case endDate = "end_date"
+        case totalPrice = "total_price"
+        case status
+    }
+}
+
+private struct DBPlantSittingBooking: Decodable {
+    let id: UUID
+    let ownerID: UUID
+    let caregiverID: UUID
+    let plantName: String?
+    let notes: String?
+    let startDate: String
+    let endDate: String
+    let totalPrice: Double
+    let status: String
+    let createdAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case ownerID = "owner_id"
+        case caregiverID = "caregiver_id"
+        case plantName = "plant_name"
+        case notes
+        case startDate = "start_date"
+        case endDate = "end_date"
+        case totalPrice = "total_price"
+        case status
+        case createdAt = "created_at"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        ownerID = try container.decode(UUID.self, forKey: .ownerID)
+        caregiverID = try container.decode(UUID.self, forKey: .caregiverID)
+        plantName = try container.decodeIfPresent(String.self, forKey: .plantName)
+        notes = try container.decodeIfPresent(String.self, forKey: .notes)
+        startDate = try container.decode(String.self, forKey: .startDate)
+        endDate = try container.decode(String.self, forKey: .endDate)
+        totalPrice = try container.decodeLossyDouble(forKey: .totalPrice)
+        status = try container.decodeIfPresent(String.self, forKey: .status) ?? BookingStatus.pending.rawValue
+        createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt)
+    }
+}
+
+private struct DBBookingStatusUpdate: Encodable {
+    let status: String
+}
+
+private struct DBCaregiverSummary: Decodable {
+    let rating: Double
+    let reviewCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case rating
+        case reviewCount = "review_count"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        rating = try container.decodeLossyDouble(forKey: .rating)
+        reviewCount = try container.decodeLossyInt(forKey: .reviewCount)
+    }
+}
+
+private struct DBCaregiverReviewInsert: Encodable {
+    let bookingID: UUID
+    let caregiverID: UUID
+    let reviewerID: UUID
+    let rating: Double
+    let comment: String
+
+    enum CodingKeys: String, CodingKey {
+        case bookingID = "booking_id"
+        case caregiverID = "caregiver_id"
+        case reviewerID = "reviewer_id"
+        case rating
+        case comment
+    }
+}
+
+private struct DBCaregiverReviewEntry: Decodable {
+    let id: UUID
+    let bookingID: UUID
+    let caregiverID: UUID
+    let reviewerID: UUID
+    let plantName: String?
+    let rating: Double
+    let comment: String?
+    let createdAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case bookingID = "booking_id"
+        case caregiverID = "caregiver_id"
+        case reviewerID = "reviewer_id"
+        case plantName = "plant_name"
+        case rating
+        case comment
+        case createdAt = "created_at"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        bookingID = try container.decode(UUID.self, forKey: .bookingID)
+        caregiverID = try container.decode(UUID.self, forKey: .caregiverID)
+        reviewerID = try container.decode(UUID.self, forKey: .reviewerID)
+        plantName = try container.decodeIfPresent(String.self, forKey: .plantName)
+        rating = try container.decodeLossyDouble(forKey: .rating)
+        comment = try container.decodeIfPresent(String.self, forKey: .comment)
+        createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt)
     }
 }
 

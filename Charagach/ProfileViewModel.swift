@@ -74,7 +74,12 @@ final class ProfileViewModel: ObservableObject {
                 .select("id", count: .exact)
                 .eq("owner_id", value: userID.uuidString)
                 .execute()
-            bookingsCount = bookingsResponse.count ?? 0
+            let caregiverBookingsResponse = try await supabase.database
+                .from("plant_sitting_bookings")
+                .select("id", count: .exact)
+                .eq("caregiver_id", value: userID.uuidString)
+                .execute()
+            bookingsCount = (bookingsResponse.count ?? 0) + (caregiverBookingsResponse.count ?? 0)
 
             let caregiversResponse = try await supabase.database
                 .from("caregivers")
@@ -185,11 +190,64 @@ final class ProfileViewModel: ObservableObject {
                 }
             }
 
+            try await syncCaregiverProfile(
+                userID: activeSession.user.id,
+                city: city.trimmingCharacters(in: .whitespacesAndNewlines),
+                decoder: decoder
+            )
+
             avatarURL = finalAvatarURL
             successMessage = "Profile updated successfully."
             await load(session: activeSession)
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    private func syncCaregiverProfile(userID: UUID, city: String, decoder: JSONDecoder) async throws {
+        let existingResponse = try await supabase.database
+            .from("caregivers")
+            .select("id, location")
+            .eq("id", value: userID.uuidString)
+            .limit(1)
+            .execute()
+        let existingRows: [DBExistingCaregiver] = try decodeArray(from: existingResponse.data, decoder: decoder)
+
+        if isCaregiver {
+            if existingRows.isEmpty {
+                let insertPayload = DBDefaultCaregiverInsert(
+                    id: userID,
+                    bio: "",
+                    pricePerDay: 0,
+                    yearsExperience: 0,
+                    location: city,
+                    specialties: [],
+                    isAvailable: false,
+                    rating: 0,
+                    reviewCount: 0
+                )
+
+                _ = try await supabase.database
+                    .from("caregivers")
+                    .insert(insertPayload)
+                    .execute()
+            } else if !city.isEmpty {
+                let updatePayload = DBCaregiverLocationUpdate(location: city)
+
+                _ = try await supabase.database
+                    .from("caregivers")
+                    .update(updatePayload)
+                    .eq("id", value: userID.uuidString)
+                    .execute()
+            }
+        } else if !existingRows.isEmpty {
+            let updatePayload = DBCaregiverAvailabilityUpdate(isAvailable: false)
+
+            _ = try await supabase.database
+                .from("caregivers")
+                .update(updatePayload)
+                .eq("id", value: userID.uuidString)
+                .execute()
         }
     }
 
@@ -260,6 +318,11 @@ private struct DBIdOnly: Decodable {
     let id: UUID
 }
 
+private struct DBExistingCaregiver: Decodable {
+    let id: UUID
+    let location: String?
+}
+
 private struct DBProfileInsert: Encodable {
     let id: UUID
     let email: String?
@@ -289,5 +352,41 @@ private struct DBProfileUpdate: Encodable {
         case city
         case avatarURL = "avatar_url"
         case isCaregiver = "is_caregiver"
+    }
+}
+
+private struct DBDefaultCaregiverInsert: Encodable {
+    let id: UUID
+    let bio: String
+    let pricePerDay: Double
+    let yearsExperience: Int
+    let location: String
+    let specialties: [String]
+    let isAvailable: Bool
+    let rating: Double
+    let reviewCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case bio
+        case pricePerDay = "price_per_day"
+        case yearsExperience = "years_experience"
+        case location
+        case specialties
+        case isAvailable = "is_available"
+        case rating
+        case reviewCount = "review_count"
+    }
+}
+
+private struct DBCaregiverLocationUpdate: Encodable {
+    let location: String
+}
+
+private struct DBCaregiverAvailabilityUpdate: Encodable {
+    let isAvailable: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case isAvailable = "is_available"
     }
 }
