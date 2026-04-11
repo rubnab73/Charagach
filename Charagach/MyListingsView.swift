@@ -313,7 +313,9 @@ private struct EditListingSheet: View {
             condition: condition,
             city: city,
             phoneNumber: phone,
-            description: description
+            description: description,
+            existingImageURLs: listing.imageURLs,
+            newImageData: []
         )
 
         onSave(input)

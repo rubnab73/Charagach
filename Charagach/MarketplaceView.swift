@@ -6,6 +6,8 @@
 //
 
 import SwiftUI
+import PhotosUI
+import UIKit
 
 // MARK: - Marketplace Tab
 
@@ -124,7 +126,12 @@ private struct AddListingView: View {
     @State private var description = ""
     @State private var category: PlantCategory = .indoor
     @State private var condition: PlantCondition = .good
+    @State private var selectedPhotoItems: [PhotosPickerItem] = []
+    @State private var selectedImageData: [Data] = []
+    @State private var showCamera = false
     @State private var errorMessage: String?
+
+    private let maxImageCount = 5
 
     let onSave: (NewListingInput) -> Void
 
@@ -154,6 +161,16 @@ private struct AddListingView: View {
                         .keyboardType(.phonePad)
                 }
 
+                Section("Pictures") {
+                    ListingImagePickerControls(
+                        selectedPhotoItems: $selectedPhotoItems,
+                        selectedImageData: $selectedImageData,
+                        showCamera: $showCamera,
+                        errorMessage: $errorMessage,
+                        maxImageCount: maxImageCount
+                    )
+                }
+
                 Section("Description") {
                     TextField("Write a short description", text: $description, axis: .vertical)
                         .lineLimit(4...7)
@@ -178,6 +195,14 @@ private struct AddListingView: View {
                         save()
                     }
                     .fontWeight(.semibold)
+                }
+            }
+            .onChange(of: selectedPhotoItems) { newItems in
+                Task { await loadSelectedPhotos(newItems) }
+            }
+            .sheet(isPresented: $showCamera) {
+                CameraImagePicker { image in
+                    addCameraImage(image)
                 }
             }
         }
@@ -215,11 +240,135 @@ private struct AddListingView: View {
             condition: condition,
             city: city,
             phoneNumber: phoneNumber,
-            description: description
+            description: description,
+            imageData: selectedImageData
         )
 
         onSave(payload)
         dismiss()
+    }
+
+    private func loadSelectedPhotos(_ items: [PhotosPickerItem]) async {
+        var loadedImages = selectedImageData
+        for item in items.prefix(maxImageCount) {
+            guard loadedImages.count < maxImageCount else { break }
+            if let data = try? await item.loadTransferable(type: Data.self) {
+                loadedImages.append(data)
+            }
+        }
+
+        selectedImageData = loadedImages
+        selectedPhotoItems = []
+    }
+
+    private func addCameraImage(_ image: UIImage) {
+        guard selectedImageData.count < maxImageCount else {
+            errorMessage = "You can add up to \(maxImageCount) pictures."
+            return
+        }
+
+        guard let data = image.jpegData(compressionQuality: 0.85) else {
+            errorMessage = "Could not read the camera image."
+            return
+        }
+
+        selectedImageData.append(data)
+    }
+}
+
+private struct ListingImagePickerControls: View {
+    @Binding var selectedPhotoItems: [PhotosPickerItem]
+    @Binding var selectedImageData: [Data]
+    @Binding var showCamera: Bool
+    @Binding var errorMessage: String?
+
+    let maxImageCount: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                PhotosPicker(
+                    selection: $selectedPhotoItems,
+                    maxSelectionCount: maxImageCount,
+                    matching: .images,
+                    photoLibrary: .shared()
+                ) {
+                    Label("Choose from Library", systemImage: "photo.on.rectangle")
+                }
+
+                Spacer()
+
+                Button {
+                    openCamera()
+                } label: {
+                    Label("Open Camera", systemImage: "camera.fill")
+                }
+            }
+
+            if selectedImageData.isEmpty {
+                Text("Add up to \(maxImageCount) clear pictures. The first picture appears on the marketplace card.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(Array(selectedImageData.enumerated()), id: \.offset) { index, data in
+                            SelectedListingImageThumb(data: data) {
+                                selectedImageData.remove(at: index)
+                                selectedPhotoItems = []
+                            }
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+        }
+    }
+
+    private func openCamera() {
+        guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
+            errorMessage = "Camera is not available on this device."
+            return
+        }
+
+        showCamera = true
+    }
+}
+
+private struct SelectedListingImageThumb: View {
+    let data: Data
+    let onRemove: () -> Void
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Group {
+                if let image = UIImage(data: data) {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(.green.opacity(0.12))
+                        .overlay {
+                            Image(systemName: "photo")
+                                .foregroundStyle(.green)
+                        }
+                }
+            }
+            .frame(width: 86, height: 86)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+
+            Button {
+                onRemove()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.title3)
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, .black.opacity(0.65))
+            }
+            .buttonStyle(.plain)
+            .padding(4)
+        }
     }
 }
 
@@ -246,6 +395,41 @@ struct CategoryChip: View {
     }
 }
 
+private struct MarketplaceListingImage: View {
+    let imageURL: String?
+    let iconName: String
+    let iconColor: Color
+
+    var body: some View {
+        ZStack {
+            iconFallback
+
+            if let imageURL, let url = URL(string: imageURL), !imageURL.isEmpty {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    default:
+                        iconFallback
+                    }
+                }
+            }
+        }
+        .clipped()
+    }
+
+    private var iconFallback: some View {
+        ZStack {
+            iconColor.opacity(0.12)
+            Image(systemName: iconName)
+                .font(.system(size: 46))
+                .foregroundStyle(iconColor)
+        }
+    }
+}
+
 // MARK: - Listing Card
 
 struct ListingCard: View {
@@ -256,12 +440,13 @@ struct ListingCard: View {
 
             // Plant image area
             ZStack {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(listing.iconColor.opacity(0.12))
-                    .frame(height: 120)
-                Image(systemName: listing.iconName)
-                    .font(.system(size: 46))
-                    .foregroundStyle(listing.iconColor)
+                MarketplaceListingImage(
+                    imageURL: listing.primaryImageURL,
+                    iconName: listing.iconName,
+                    iconColor: listing.iconColor
+                )
+                .frame(height: 120)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
                 if listing.status.lowercased() == "sold" {
                     VStack {
@@ -319,11 +504,39 @@ struct ListingCard: View {
     }
 }
 
+private struct ListingDetailHero: View {
+    let listing: PlantListing
+
+    var body: some View {
+        if listing.imageURLs.isEmpty {
+            ZStack {
+                listing.iconColor.opacity(0.1)
+                Image(systemName: listing.iconName)
+                    .font(.system(size: 110))
+                    .foregroundStyle(listing.iconColor)
+            }
+        } else {
+            TabView {
+                ForEach(listing.imageURLs, id: \.self) { imageURL in
+                    MarketplaceListingImage(
+                        imageURL: imageURL,
+                        iconName: listing.iconName,
+                        iconColor: listing.iconColor
+                    )
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: listing.imageURLs.count > 1 ? .automatic : .never))
+        }
+    }
+}
+
 // MARK: - Plant Detail View
 
 struct PlantDetailView: View {
     let listing: PlantListing
     @State private var showContact = false
+    @State private var contactErrorMessage: String?
+    @Environment(\.openURL) private var openURL
 
     private var conditionColor: Color {
         switch listing.condition {
@@ -338,14 +551,9 @@ struct PlantDetailView: View {
             VStack(alignment: .leading, spacing: 0) {
 
                 // Hero banner
-                ZStack {
-                    listing.iconColor.opacity(0.1)
-                    Image(systemName: listing.iconName)
-                        .font(.system(size: 110))
-                        .foregroundStyle(listing.iconColor)
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: 240)
+                ListingDetailHero(listing: listing)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 240)
 
                 VStack(alignment: .leading, spacing: 20) {
 
@@ -453,10 +661,50 @@ struct PlantDetailView: View {
         }
         .ignoresSafeArea(edges: .top)
         .navigationBarTitleDisplayMode(.inline)
-        .alert("Contact Seller", isPresented: $showContact) {
-            Button("OK") {}
+        .confirmationDialog("Contact Seller", isPresented: $showContact, titleVisibility: .visible) {
+            if let phone = sanitizedPhoneNumber {
+                Button("Call \(phone)") {
+                    openContactURL(scheme: "tel", phone: phone)
+                }
+                Button("Message \(phone)") {
+                    openContactURL(scheme: "sms", phone: phone)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
         } message: {
-            Text("In a future update you will be able to message \(listing.sellerName) directly in-app.")
+            if sanitizedPhoneNumber == nil {
+                Text("No phone number is available for this seller.")
+            } else {
+                Text("Choose how to contact \(listing.sellerName).")
+            }
+        }
+        .alert("Contact Seller", isPresented: Binding(
+            get: { contactErrorMessage != nil },
+            set: { if !$0 { contactErrorMessage = nil } }
+        )) {
+            Button("OK") { contactErrorMessage = nil }
+        } message: {
+            Text(contactErrorMessage ?? "")
+        }
+    }
+
+    private var sanitizedPhoneNumber: String? {
+        guard let phoneNumber = listing.phoneNumber else { return nil }
+        let allowed = CharacterSet(charactersIn: "+0123456789")
+        let filtered = String(phoneNumber.unicodeScalars.filter { allowed.contains($0) })
+        return filtered.isEmpty ? nil : filtered
+    }
+
+    private func openContactURL(scheme: String, phone: String) {
+        guard let url = URL(string: "\(scheme):\(phone)") else {
+            contactErrorMessage = "Could not open this phone number."
+            return
+        }
+
+        openURL(url) { accepted in
+            if !accepted {
+                contactErrorMessage = "This device cannot open \(scheme == "tel" ? "phone calls" : "messages") right now."
+            }
         }
     }
 }

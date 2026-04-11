@@ -20,6 +20,7 @@ struct PlantListing: Identifiable {
     let location: String
     let description: String
     let phoneNumber: String?
+    let imageURLs: [String]
     let iconName: String
     let iconColor: Color
     let postedDaysAgo: Int
@@ -36,6 +37,7 @@ struct PlantListing: Identifiable {
         location: String,
         description: String,
         phoneNumber: String? = nil,
+        imageURLs: [String] = [],
         iconName: String,
         iconColor: Color,
         postedDaysAgo: Int,
@@ -51,10 +53,15 @@ struct PlantListing: Identifiable {
         self.location = location
         self.description = description
         self.phoneNumber = phoneNumber
+        self.imageURLs = imageURLs
         self.iconName = iconName
         self.iconColor = iconColor
         self.postedDaysAgo = postedDaysAgo
         self.status = status
+    }
+
+    var primaryImageURL: String? {
+        imageURLs.first
     }
 }
 

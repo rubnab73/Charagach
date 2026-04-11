@@ -14,6 +14,34 @@ struct PlantSittingView: View {
     @StateObject private var dataStore = SupabaseDataStore()
     @State private var showBecomeSitter = false
     @State private var showSaved = false
+    @State private var nearbyCity = ""
+    @State private var showOnlyNearby = false
+
+    private var trimmedNearbyCity: String {
+        nearbyCity.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var nearbyCaregivers: [Caregiver] {
+        guard !trimmedNearbyCity.isEmpty else { return [] }
+        return dataStore.caregivers.filter { locationMatches($0.location, city: trimmedNearbyCity) }
+    }
+
+    private var displayedCaregivers: [Caregiver] {
+        let source = showOnlyNearby && !trimmedNearbyCity.isEmpty ? nearbyCaregivers : dataStore.caregivers
+        return source.sorted { lhs, rhs in
+            let lhsNearby = !trimmedNearbyCity.isEmpty && locationMatches(lhs.location, city: trimmedNearbyCity)
+            let rhsNearby = !trimmedNearbyCity.isEmpty && locationMatches(rhs.location, city: trimmedNearbyCity)
+
+            if lhsNearby != rhsNearby { return lhsNearby && !rhsNearby }
+            if lhs.isAvailable != rhs.isAvailable { return lhs.isAvailable && !rhs.isAvailable }
+            if lhs.rating != rhs.rating { return lhs.rating > rhs.rating }
+            return lhs.name < rhs.name
+        }
+    }
+
+    private var nearbyAvailableCount: Int {
+        nearbyCaregivers.filter(\.isAvailable).count
+    }
 
     var body: some View {
         NavigationStack {
@@ -58,23 +86,47 @@ struct PlantSittingView: View {
                     .background(.green.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
                     .padding(.horizontal)
 
+                    NearbyCaregiverCheck(
+                        city: $nearbyCity,
+                        showOnlyNearby: $showOnlyNearby,
+                        nearbyCount: nearbyCaregivers.count,
+                        nearbyAvailableCount: nearbyAvailableCount
+                    )
+                    .padding(.horizontal)
+
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
                             Text("Available Caregivers")
                                 .font(.headline)
                             Spacer()
-                            Text("\(dataStore.caregivers.filter(\.isAvailable).count) available")
+                            Text("\(displayedCaregivers.filter(\.isAvailable).count) available")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         .padding(.horizontal)
 
-                        ForEach(dataStore.caregivers) { caregiver in
-                            NavigationLink(destination: CaregiverDetailView(caregiver: caregiver, authViewModel: authViewModel)) {
-                                CaregiverCard(caregiver: caregiver)
+                        if displayedCaregivers.isEmpty {
+                            VStack(spacing: 10) {
+                                Image(systemName: "location.slash")
+                                    .font(.system(size: 34))
+                                    .foregroundStyle(.secondary)
+                                Text("No nearby caregivers found")
+                                    .font(.headline)
+                                Text("Try another city or show all caregivers.")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
                             }
-                            .buttonStyle(.plain)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 28)
                             .padding(.horizontal)
+                        } else {
+                            ForEach(displayedCaregivers) { caregiver in
+                                NavigationLink(destination: CaregiverDetailView(caregiver: caregiver, authViewModel: authViewModel)) {
+                                    CaregiverCard(caregiver: caregiver)
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.horizontal)
+                            }
                         }
                     }
                 }
@@ -106,6 +158,7 @@ struct PlantSittingView: View {
             }
             .task {
                 await dataStore.loadCaregivers()
+                await loadDefaultNearbyCity()
             }
             .alert("Plant Sitting", isPresented: Binding(
                 get: { dataStore.errorMessage != nil },
@@ -121,6 +174,79 @@ struct PlantSittingView: View {
                 Text("Your sitter profile has been saved.")
             }
         }
+    }
+
+    private func loadDefaultNearbyCity() async {
+        guard trimmedNearbyCity.isEmpty else { return }
+        guard let city = try? await dataStore.loadCurrentUserCity(session: authViewModel.session), let city, !city.isEmpty else {
+            return
+        }
+        nearbyCity = city
+    }
+
+    private func locationMatches(_ location: String, city: String) -> Bool {
+        let normalizedLocation = normalizeLocation(location)
+        let normalizedCity = normalizeLocation(city)
+        guard !normalizedLocation.isEmpty, !normalizedCity.isEmpty else { return false }
+
+        let locationParts = normalizedLocation
+            .split(separator: ",")
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+
+        return locationParts.contains(normalizedCity)
+            || normalizedLocation == normalizedCity
+            || normalizedLocation.hasPrefix("\(normalizedCity),")
+    }
+
+    private func normalizeLocation(_ value: String) -> String {
+        value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .lowercased()
+    }
+}
+
+private struct NearbyCaregiverCheck: View {
+    @Binding var city: String
+    @Binding var showOnlyNearby: Bool
+
+    let nearbyCount: Int
+    let nearbyAvailableCount: Int
+
+    private var trimmedCity: String {
+        city.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Check Nearby Caregivers")
+                .font(.headline)
+
+            TextField("Enter your city", text: $city)
+                .textFieldStyle(.roundedBorder)
+
+            if trimmedCity.isEmpty {
+                Label("Enter a city to check nearby sitters.", systemImage: "location")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if nearbyCount == 0 {
+                Label("No caregivers found in \(trimmedCity).", systemImage: "location.slash")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            } else {
+                Label(
+                    "\(nearbyAvailableCount) of \(nearbyCount) caregiver\(nearbyCount == 1 ? "" : "s") available in \(trimmedCity).",
+                    systemImage: "location.fill"
+                )
+                .font(.caption)
+                .foregroundStyle(.green)
+            }
+
+            Toggle("Show nearby only", isOn: $showOnlyNearby)
+                .disabled(trimmedCity.isEmpty)
+        }
+        .padding(14)
+        .background(.green.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
     }
 }
 

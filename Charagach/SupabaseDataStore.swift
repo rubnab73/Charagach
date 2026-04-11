@@ -7,6 +7,7 @@
 
 import SwiftUI
 import Supabase
+import UIKit
 
 struct NewListingInput {
     let name: String
@@ -17,6 +18,7 @@ struct NewListingInput {
     let city: String
     let phoneNumber: String
     let description: String
+    let imageData: [Data]
 }
 
 struct UpdateListingInput {
@@ -28,6 +30,8 @@ struct UpdateListingInput {
     let city: String
     let phoneNumber: String
     let description: String
+    let existingImageURLs: [String]
+    let newImageData: [Data]
 }
 
 struct NewCaregiverInput {
@@ -92,6 +96,7 @@ final class SupabaseDataStore: ObservableObject {
                     location: row.city ?? "Unknown",
                     description: row.description ?? "",
                     phoneNumber: row.phoneNumber,
+                    imageURLs: row.resolvedImageURLs,
                     iconName: Self.iconName(for: row.category),
                     iconColor: Self.iconColor(for: row.category),
                     postedDaysAgo: Self.daysAgo(from: row.createdAt),
@@ -112,6 +117,8 @@ final class SupabaseDataStore: ObservableObject {
             throw DataStoreError.notAuthenticated
         }
 
+        let imageURLs = try await uploadListingImages(input.imageData, userID: userID)
+
         let payload = DBPlantListingInsert(
             sellerID: userID,
             title: input.name,
@@ -122,6 +129,8 @@ final class SupabaseDataStore: ObservableObject {
             description: input.description,
             city: input.city,
             phoneNumber: input.phoneNumber,
+            imageURL: imageURLs.first,
+            imageURLs: imageURLs,
             status: "active"
         )
 
@@ -160,6 +169,7 @@ final class SupabaseDataStore: ObservableObject {
                 location: row.city ?? "Unknown",
                 description: row.description ?? "",
                 phoneNumber: row.phoneNumber,
+                imageURLs: row.resolvedImageURLs,
                 iconName: Self.iconName(for: row.category),
                 iconColor: Self.iconColor(for: row.category),
                 postedDaysAgo: Self.daysAgo(from: row.createdAt),
@@ -169,7 +179,10 @@ final class SupabaseDataStore: ObservableObject {
     }
 
     func updateListing(listingID: UUID, input: UpdateListingInput, session: Session?) async throws {
-        guard session != nil else { throw DataStoreError.notAuthenticated }
+        guard let userID = session?.user.id else { throw DataStoreError.notAuthenticated }
+
+        let uploadedImageURLs = try await uploadListingImages(input.newImageData, userID: userID)
+        let imageURLs = uploadedImageURLs.isEmpty ? input.existingImageURLs : uploadedImageURLs
 
         let payload = DBListingEditUpdate(
             title: input.name,
@@ -179,7 +192,9 @@ final class SupabaseDataStore: ObservableObject {
             condition: input.condition.rawValue,
             city: input.city,
             phoneNumber: input.phoneNumber,
-            description: input.description
+            description: input.description,
+            imageURL: imageURLs.first,
+            imageURLs: imageURLs
         )
 
         _ = try await supabase.database
@@ -255,6 +270,23 @@ final class SupabaseDataStore: ObservableObject {
         }
     }
 
+    func loadCurrentUserCity(session: Session?) async throws -> String? {
+        guard let userID = session?.user.id else {
+            throw DataStoreError.notAuthenticated
+        }
+
+        let response = try await supabase.database
+            .from("profiles")
+            .select("city")
+            .eq("id", value: userID.uuidString)
+            .limit(1)
+            .execute()
+
+        let decoder = JSONDecoder()
+        let rows: [DBProfileCity] = try decodeArray(from: response.data, decoder: decoder)
+        return rows.first?.city?.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     func registerCaregiver(_ input: NewCaregiverInput, session: Session?) async throws {
         let activeSession: Session
         if let session {
@@ -299,24 +331,48 @@ final class SupabaseDataStore: ObservableObject {
             .eq("id", value: userID.uuidString)
             .execute()
 
-        let caregiverUpsert = DBCaregiverUpsert(
-            id: userID,
-            bio: input.bio,
-            pricePerDay: input.pricePerDay,
-            yearsExperience: input.yearsExperience,
-            location: input.location,
-            specialties: input.specialties,
-            isAvailable: input.isAvailable,
-            rating: 0,
-            reviewCount: 0
-        )
-
-        // Some projects enforce policies that make upsert brittle.
-        // Upsert by primary key id, then verify to avoid silent no-op writes.
-        _ = try await supabase.database
+        let decoder = JSONDecoder()
+        let existingCaregiverResponse = try await supabase.database
             .from("caregivers")
-            .upsert(caregiverUpsert)
+            .select("id")
+            .eq("id", value: userID.uuidString)
+            .limit(1)
             .execute()
+        let existingCaregivers: [DBIdOnly] = try decodeArray(from: existingCaregiverResponse.data, decoder: decoder)
+
+        if existingCaregivers.isEmpty {
+            let caregiverInsert = DBCaregiverInsert(
+                id: userID,
+                bio: input.bio,
+                pricePerDay: input.pricePerDay,
+                yearsExperience: input.yearsExperience,
+                location: input.location,
+                specialties: input.specialties,
+                isAvailable: input.isAvailable,
+                rating: 0,
+                reviewCount: 0
+            )
+
+            _ = try await supabase.database
+                .from("caregivers")
+                .insert(caregiverInsert)
+                .execute()
+        } else {
+            let caregiverUpdate = DBCaregiverUpdate(
+                bio: input.bio,
+                pricePerDay: input.pricePerDay,
+                yearsExperience: input.yearsExperience,
+                location: input.location,
+                specialties: input.specialties,
+                isAvailable: input.isAvailable
+            )
+
+            _ = try await supabase.database
+                .from("caregivers")
+                .update(caregiverUpdate)
+                .eq("id", value: userID.uuidString)
+                .execute()
+        }
 
         let verifyResponse = try await supabase.database
             .from("caregivers")
@@ -325,7 +381,6 @@ final class SupabaseDataStore: ObservableObject {
             .limit(1)
             .execute()
 
-        let decoder = JSONDecoder()
         let savedRows: [DBIdOnly] = try decodeArray(from: verifyResponse.data, decoder: decoder)
         guard !savedRows.isEmpty else {
             throw DataStoreError.caregiverSaveFailed
@@ -460,14 +515,26 @@ final class SupabaseDataStore: ObservableObject {
             let givenRows: [DBCaregiverReviewEntry] = try decodeArray(from: givenResponse.data, decoder: decoder)
             let receivedRows: [DBCaregiverReviewEntry] = try decodeArray(from: receivedResponse.data, decoder: decoder)
 
-            let bookingResponse = try await supabase.database
+            let ownerBookingResponse = try await supabase.database
                 .from("plant_sitting_bookings")
                 .select()
                 .eq("owner_id", value: userID.uuidString)
                 .order("start_date", ascending: false)
                 .execute()
 
-            let bookingRows: [DBPlantSittingBooking] = try decodeArray(from: bookingResponse.data, decoder: decoder)
+            let caregiverBookingResponse = try await supabase.database
+                .from("plant_sitting_bookings")
+                .select()
+                .eq("caregiver_id", value: userID.uuidString)
+                .order("start_date", ascending: false)
+                .execute()
+
+            let ownerBookingRows: [DBPlantSittingBooking] = try decodeArray(from: ownerBookingResponse.data, decoder: decoder)
+            let caregiverBookingRows: [DBPlantSittingBooking] = try decodeArray(from: caregiverBookingResponse.data, decoder: decoder)
+            let bookingRows = uniqueBookings(from: ownerBookingRows + caregiverBookingRows)
+            let bookingNameByID = Dictionary(uniqueKeysWithValues: bookingRows.map {
+                ($0.id, $0.plantName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")
+            })
 
             let profileResponse = try await supabase.database
                 .from("profiles")
@@ -485,7 +552,7 @@ final class SupabaseDataStore: ObservableObject {
             let summaryRows: [DBCaregiverSummary] = try decodeArray(from: summaryResponse.data, decoder: decoder)
 
             let givenReviewBookingIDs = Set(givenRows.map(\.bookingID))
-            let pending = bookingRows
+            let pending = ownerBookingRows
                 .filter { $0.status.lowercased() == BookingStatus.completed.rawValue && !givenReviewBookingIDs.contains($0.id) }
                 .map { row in
                     PlantSittingBooking(
@@ -512,7 +579,7 @@ final class SupabaseDataStore: ObservableObject {
                     reviewerID: row.reviewerID,
                     caregiverName: profileByID[row.caregiverID]?.fullName?.isEmpty == false ? profileByID[row.caregiverID]!.fullName! : "Caregiver",
                     reviewerName: profileByID[row.reviewerID]?.fullName?.isEmpty == false ? profileByID[row.reviewerID]!.fullName! : "You",
-                    plantName: row.plantName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+                    plantName: bookingNameByID[row.bookingID] ?? row.plantName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
                     rating: row.rating,
                     comment: row.comment?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
                     createdAt: Self.parseTimestamp(row.createdAt)
@@ -527,7 +594,7 @@ final class SupabaseDataStore: ObservableObject {
                     reviewerID: row.reviewerID,
                     caregiverName: profileByID[row.caregiverID]?.fullName?.isEmpty == false ? profileByID[row.caregiverID]!.fullName! : "You",
                     reviewerName: profileByID[row.reviewerID]?.fullName?.isEmpty == false ? profileByID[row.reviewerID]!.fullName! : "Plant owner",
-                    plantName: row.plantName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+                    plantName: bookingNameByID[row.bookingID] ?? row.plantName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
                     rating: row.rating,
                     comment: row.comment?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
                     createdAt: Self.parseTimestamp(row.createdAt)
@@ -572,6 +639,41 @@ final class SupabaseDataStore: ObservableObject {
         } catch {
             throw mapReviewFeatureError(error)
         }
+    }
+
+    private func uploadListingImages(_ images: [Data], userID: UUID) async throws -> [String] {
+        guard !images.isEmpty else { return [] }
+
+        var urls: [String] = []
+        for (index, imageData) in images.prefix(5).enumerated() {
+            let compressedData = compressedJPEGData(from: imageData)
+            let fileName = "listing-\(Int(Date().timeIntervalSince1970))-\(index)-\(UUID().uuidString).jpg"
+            let path = "\(userID.uuidString)/\(fileName)"
+
+            _ = try await supabase.storage
+                .from("listing-images")
+                .upload(
+                    path: path,
+                    file: compressedData
+                )
+
+            let publicURL = try supabase.storage
+                .from("listing-images")
+                .getPublicURL(path: path)
+
+            urls.append(publicURL.absoluteString)
+        }
+
+        return urls
+    }
+
+    private func compressedJPEGData(from data: Data) -> Data {
+        guard let image = UIImage(data: data),
+              let jpeg = image.jpegData(compressionQuality: 0.82)
+        else {
+            return data
+        }
+        return jpeg
     }
 
     private static func iconName(for category: String) -> String {
@@ -694,6 +796,8 @@ private struct DBPlantListing: Decodable {
     let description: String?
     let city: String?
     let phoneNumber: String?
+    let imageURL: String?
+    let imageURLs: [String]
     let createdAt: String?
     let status: String
 
@@ -708,8 +812,16 @@ private struct DBPlantListing: Decodable {
         case description
         case city
         case phoneNumber = "phone_number"
+        case imageURL = "image_url"
+        case imageURLs = "image_urls"
         case createdAt = "created_at"
         case status
+    }
+
+    var resolvedImageURLs: [String] {
+        if !imageURLs.isEmpty { return imageURLs }
+        if let imageURL, !imageURL.isEmpty { return [imageURL] }
+        return []
     }
 
     init(from decoder: Decoder) throws {
@@ -724,6 +836,8 @@ private struct DBPlantListing: Decodable {
         description = try container.decodeIfPresent(String.self, forKey: .description)
         city = try container.decodeIfPresent(String.self, forKey: .city)
         phoneNumber = try container.decodeIfPresent(String.self, forKey: .phoneNumber)
+        imageURL = try container.decodeIfPresent(String.self, forKey: .imageURL)
+        imageURLs = try container.decodeIfPresent([String].self, forKey: .imageURLs) ?? []
         createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt)
         status = try container.decodeIfPresent(String.self, forKey: .status) ?? "active"
     }
@@ -739,6 +853,8 @@ private struct DBPlantListingInsert: Encodable {
     let description: String
     let city: String
     let phoneNumber: String
+    let imageURL: String?
+    let imageURLs: [String]
     let status: String
 
     enum CodingKeys: String, CodingKey {
@@ -751,6 +867,8 @@ private struct DBPlantListingInsert: Encodable {
         case description
         case city
         case phoneNumber = "phone_number"
+        case imageURL = "image_url"
+        case imageURLs = "image_urls"
         case status
     }
 }
@@ -764,6 +882,8 @@ private struct DBListingEditUpdate: Encodable {
     let city: String
     let phoneNumber: String
     let description: String
+    let imageURL: String?
+    let imageURLs: [String]
 
     enum CodingKeys: String, CodingKey {
         case title
@@ -774,6 +894,8 @@ private struct DBListingEditUpdate: Encodable {
         case city
         case phoneNumber = "phone_number"
         case description
+        case imageURL = "image_url"
+        case imageURLs = "image_urls"
     }
 }
 
@@ -789,6 +911,10 @@ private struct DBListingProfile: Decodable {
         case id
         case fullName = "full_name"
     }
+}
+
+private struct DBProfileCity: Decodable {
+    let city: String?
 }
 
 private struct DBCaregiver: Decodable {
@@ -856,7 +982,7 @@ private struct DBProfileUpsert: Encodable {
     }
 }
 
-private struct DBCaregiverUpsert: Encodable {
+private struct DBCaregiverInsert: Encodable {
     let id: UUID
     let bio: String
     let pricePerDay: Double
@@ -877,6 +1003,24 @@ private struct DBCaregiverUpsert: Encodable {
         case isAvailable = "is_available"
         case rating
         case reviewCount = "review_count"
+    }
+}
+
+private struct DBCaregiverUpdate: Encodable {
+    let bio: String
+    let pricePerDay: Double
+    let yearsExperience: Int
+    let location: String
+    let specialties: [String]
+    let isAvailable: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case bio
+        case pricePerDay = "price_per_day"
+        case yearsExperience = "years_experience"
+        case location
+        case specialties
+        case isAvailable = "is_available"
     }
 }
 
