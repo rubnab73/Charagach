@@ -170,7 +170,13 @@ struct ProfileView: View {
             return
         }
 
-        openURL(url)
+        // Keep the support button from failing silently when no mail app is configured.
+        openURL(url) { accepted in
+            if !accepted {
+                profileErrorText = "This device cannot open an email app right now."
+                showProfileError = true
+            }
+        }
     }
 }
 
@@ -714,6 +720,18 @@ private struct BookingStatusBadge: View {
 
 // MARK: - Reviews
 
+private enum ReviewSheetTarget: Identifiable {
+    case booking(PlantSittingBooking)
+    case review(CaregiverReviewEntry)
+
+    var id: UUID {
+        switch self {
+        case .booking(let booking): return booking.id
+        case .review(let review): return review.id
+        }
+    }
+}
+
 private struct ProfileReviewsView: View {
     @ObservedObject var authViewModel: AuthViewModel
     @StateObject private var dataStore = SupabaseDataStore()
@@ -721,7 +739,7 @@ private struct ProfileReviewsView: View {
     @State private var reviewCenter = ReviewCenterData.empty
     @State private var isLoading = false
     @State private var errorMessage: String?
-    @State private var selectedBookingForReview: PlantSittingBooking?
+    @State private var selectedReviewTarget: ReviewSheetTarget?
 
     var body: some View {
         ScrollView {
@@ -752,7 +770,7 @@ private struct ProfileReviewsView: View {
                         ReviewSection(title: "Pending Feedback") {
                             ForEach(reviewCenter.pending) { booking in
                                 PendingReviewCard(booking: booking) {
-                                    selectedBookingForReview = booking
+                                    selectedReviewTarget = .booking(booking)
                                 }
                             }
                         }
@@ -780,7 +798,11 @@ private struct ProfileReviewsView: View {
                                     subtitle: review.plantName.isEmpty ? "Plant sitting review" : review.plantName,
                                     rating: review.rating,
                                     comment: review.comment,
-                                    date: review.createdAt
+                                    date: review.createdAt,
+                                    actionTitle: "Edit Review",
+                                    action: {
+                                        selectedReviewTarget = .review(review)
+                                    }
                                 )
                             }
                         }
@@ -805,8 +827,8 @@ private struct ProfileReviewsView: View {
         .refreshable {
             await refresh()
         }
-        .sheet(item: $selectedBookingForReview) { booking in
-            LeaveReviewSheet(authViewModel: authViewModel, booking: booking) {
+        .sheet(item: $selectedReviewTarget) { target in
+            LeaveReviewSheet(authViewModel: authViewModel, target: target) {
                 await refresh()
             }
         }
@@ -848,7 +870,7 @@ private struct ReviewSummaryCard: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 4) {
                         ForEach(0..<5, id: \.self) { index in
-                            Image(systemName: Double(index) < averageRating.rounded(.down) ? "star.fill" : "star")
+                            Image(systemName: Double(index) < averageRating.rounded() ? "star.fill" : "star")
                                 .foregroundStyle(.yellow)
                         }
                     }
@@ -913,6 +935,8 @@ private struct ReviewRow: View {
     let rating: Double
     let comment: String
     let date: Date?
+    var actionTitle: String? = nil
+    var action: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -943,6 +967,13 @@ private struct ReviewRow: View {
             Text(comment.isEmpty ? "No written comment." : comment)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+
+            if let actionTitle, let action {
+                Button(actionTitle) {
+                    action()
+                }
+                .buttonStyle(.bordered)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
@@ -959,20 +990,46 @@ private struct LeaveReviewSheet: View {
     @StateObject private var dataStore = SupabaseDataStore()
     @Environment(\.dismiss) private var dismiss
 
-    let booking: PlantSittingBooking
+    let bookingID: UUID
+    let caregiverID: UUID
+    let plantTitle: String
+    let caregiverName: String
     let onSubmitted: () async -> Void
 
-    @State private var rating = 5
-    @State private var comment = ""
+    @State private var rating: Int
+    @State private var comment: String
     @State private var isSaving = false
     @State private var errorMessage: String?
+
+    init(authViewModel: AuthViewModel, target: ReviewSheetTarget, onSubmitted: @escaping () async -> Void) {
+        _authViewModel = ObservedObject(wrappedValue: authViewModel)
+        self.onSubmitted = onSubmitted
+
+        switch target {
+        case .booking(let booking):
+            self.bookingID = booking.id
+            self.caregiverID = booking.caregiverID
+            self.plantTitle = booking.displayPlantName
+            self.caregiverName = booking.caregiverName
+            _rating = State(initialValue: 5)
+            _comment = State(initialValue: "")
+        case .review(let review):
+            self.bookingID = review.bookingID
+            self.caregiverID = review.caregiverID
+            self.plantTitle = review.plantName.isEmpty ? "Plant sitting review" : review.plantName
+            self.caregiverName = review.caregiverName
+            // Load the saved rating/comment so edits reflect the actual persisted review.
+            _rating = State(initialValue: min(5, max(1, Int(review.rating.rounded()))))
+            _comment = State(initialValue: review.comment)
+        }
+    }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Booking") {
-                    Text(booking.displayPlantName)
-                    Text(booking.caregiverName)
+                    Text(plantTitle)
+                    Text(caregiverName)
                         .foregroundStyle(.secondary)
                 }
 
@@ -1030,8 +1087,8 @@ private struct LeaveReviewSheet: View {
         do {
             try await dataStore.submitReview(
                 NewReviewInput(
-                    bookingID: booking.id,
-                    caregiverID: booking.caregiverID,
+                    bookingID: bookingID,
+                    caregiverID: caregiverID,
                     rating: rating,
                     comment: comment
                 ),
@@ -1148,6 +1205,7 @@ private struct PrivacySecurityView: View {
 
 private struct HelpCenterView: View {
     @Environment(\.openURL) private var openURL
+    @State private var supportErrorMessage: String?
 
     private let faqs: [HelpFAQ] = [
         HelpFAQ(
@@ -1195,11 +1253,24 @@ private struct HelpCenterView: View {
             }
         }
         .navigationTitle("Help Center")
+        .alert("Help Center", isPresented: Binding(
+            get: { supportErrorMessage != nil },
+            set: { if !$0 { supportErrorMessage = nil } }
+        )) {
+            Button("OK") { supportErrorMessage = nil }
+        } message: {
+            Text(supportErrorMessage ?? "")
+        }
     }
 
     private func openSupportEmail() {
         guard let url = URL(string: "mailto:support@charagach.app") else { return }
-        openURL(url)
+        // Keep the support button from failing silently when no mail app is configured.
+        openURL(url) { accepted in
+            if !accepted {
+                supportErrorMessage = "This device cannot open an email app right now."
+            }
+        }
     }
 }
 

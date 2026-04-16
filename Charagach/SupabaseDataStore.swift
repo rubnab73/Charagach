@@ -624,18 +624,42 @@ final class SupabaseDataStore: ObservableObject {
         }
 
         do {
-            let payload = DBCaregiverReviewInsert(
-                bookingID: input.bookingID,
-                caregiverID: input.caregiverID,
-                reviewerID: userID,
-                rating: Double(input.rating),
-                comment: input.comment.trimmingCharacters(in: .whitespacesAndNewlines)
-            )
-
-            _ = try await supabase.database
+            let decoder = JSONDecoder()
+            let existingResponse = try await supabase.database
                 .from("caregiver_reviews")
-                .insert(payload)
+                .select("id")
+                .eq("booking_id", value: input.bookingID.uuidString)
+                .eq("reviewer_id", value: userID.uuidString)
+                .limit(1)
                 .execute()
+            let existingRows: [DBIdOnly] = try decodeArray(from: existingResponse.data, decoder: decoder)
+
+            if let existingReview = existingRows.first {
+                // Reuse the saved review row so editing a rating updates persisted data instead of failing on the unique booking constraint.
+                let payload = DBCaregiverReviewUpdate(
+                    rating: Double(input.rating),
+                    comment: input.comment.trimmingCharacters(in: .whitespacesAndNewlines)
+                )
+
+                _ = try await supabase.database
+                    .from("caregiver_reviews")
+                    .update(payload)
+                    .eq("id", value: existingReview.id.uuidString)
+                    .execute()
+            } else {
+                let payload = DBCaregiverReviewInsert(
+                    bookingID: input.bookingID,
+                    caregiverID: input.caregiverID,
+                    reviewerID: userID,
+                    rating: Double(input.rating),
+                    comment: input.comment.trimmingCharacters(in: .whitespacesAndNewlines)
+                )
+
+                _ = try await supabase.database
+                    .from("caregiver_reviews")
+                    .insert(payload)
+                    .execute()
+            }
         } catch {
             throw mapReviewFeatureError(error)
         }
@@ -1134,6 +1158,11 @@ private struct DBCaregiverReviewInsert: Encodable {
         case rating
         case comment
     }
+}
+
+private struct DBCaregiverReviewUpdate: Encodable {
+    let rating: Double
+    let comment: String
 }
 
 private struct DBCaregiverReviewEntry: Decodable {

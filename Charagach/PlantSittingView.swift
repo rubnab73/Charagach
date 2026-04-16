@@ -6,12 +6,14 @@
 //
 
 import SwiftUI
+import CoreLocation
 
 // MARK: - Plant Sitting Tab
 
 struct PlantSittingView: View {
     @ObservedObject var authViewModel: AuthViewModel
     @StateObject private var dataStore = SupabaseDataStore()
+    @StateObject private var locationManager = NearbyLocationManager()
     @State private var showBecomeSitter = false
     @State private var showSaved = false
     @State private var nearbyCity = ""
@@ -90,7 +92,12 @@ struct PlantSittingView: View {
                         city: $nearbyCity,
                         showOnlyNearby: $showOnlyNearby,
                         nearbyCount: nearbyCaregivers.count,
-                        nearbyAvailableCount: nearbyAvailableCount
+                        nearbyAvailableCount: nearbyAvailableCount,
+                        isLocating: locationManager.isLocating,
+                        locationMessage: locationManager.locationMessage,
+                        onUseCurrentLocation: {
+                            locationManager.requestCurrentCity()
+                        }
                     )
                     .padding(.horizontal)
 
@@ -160,6 +167,17 @@ struct PlantSittingView: View {
                 await dataStore.loadCaregivers()
                 await loadDefaultNearbyCity()
             }
+            .onAppear {
+                // Refresh on tab revisit so updated caregiver ratings are not shown from stale state.
+                Task { await dataStore.loadCaregivers() }
+            }
+            .onChange(of: locationManager.detectedCity) { detectedCity in
+                // Nearby filtering already works by city; CoreLocation only fills this field safely.
+                if let detectedCity, !detectedCity.isEmpty {
+                    nearbyCity = detectedCity
+                    showOnlyNearby = true
+                }
+            }
             .alert("Plant Sitting", isPresented: Binding(
                 get: { dataStore.errorMessage != nil },
                 set: { if !$0 { dataStore.errorMessage = nil } }
@@ -212,6 +230,9 @@ private struct NearbyCaregiverCheck: View {
 
     let nearbyCount: Int
     let nearbyAvailableCount: Int
+    let isLocating: Bool
+    let locationMessage: String?
+    let onUseCurrentLocation: () -> Void
 
     private var trimmedCity: String {
         city.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -224,6 +245,28 @@ private struct NearbyCaregiverCheck: View {
 
             TextField("Enter your city", text: $city)
                 .textFieldStyle(.roundedBorder)
+
+            Button {
+                onUseCurrentLocation()
+            } label: {
+                HStack(spacing: 8) {
+                    if isLocating {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    }
+                    Label("Use Current Location", systemImage: "location.fill")
+                }
+            }
+            .buttonStyle(.bordered)
+            .tint(.green)
+            .disabled(isLocating)
+
+            if let locationMessage, !locationMessage.isEmpty {
+                // Permission failures stay non-blocking because manual city search still works.
+                Text(locationMessage)
+                    .font(.caption)
+                    .foregroundStyle(locationMessage.hasPrefix("Using") ? .green : .orange)
+            }
 
             if trimmedCity.isEmpty {
                 Label("Enter a city to check nearby sitters.", systemImage: "location")
@@ -672,5 +715,96 @@ struct CaregiverDetailView: View {
         } catch {
             bookingErrorMessage = error.localizedDescription
         }
+    }
+}
+
+private final class NearbyLocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
+    @Published var detectedCity: String?
+    @Published var locationMessage: String?
+    @Published var isLocating = false
+
+    private let manager = CLLocationManager()
+    private let geocoder = CLGeocoder()
+
+    override init() {
+        super.init()
+        manager.delegate = self
+        manager.desiredAccuracy = kCLLocationAccuracyKilometer
+    }
+
+    func requestCurrentCity() {
+        locationMessage = nil
+
+        switch manager.authorizationStatus {
+        case .notDetermined:
+            isLocating = true
+            manager.requestWhenInUseAuthorization()
+        case .authorizedAlways, .authorizedWhenInUse:
+            requestLocation()
+        case .denied, .restricted:
+            isLocating = false
+            locationMessage = "Location permission is off. You can still type your city manually."
+        @unknown default:
+            isLocating = false
+            locationMessage = "Could not check location permission. Please type your city manually."
+        }
+    }
+
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        switch manager.authorizationStatus {
+        case .authorizedAlways, .authorizedWhenInUse:
+            requestLocation()
+        case .denied, .restricted:
+            isLocating = false
+            locationMessage = "Location permission is off. You can still type your city manually."
+        case .notDetermined:
+            break
+        @unknown default:
+            isLocating = false
+            locationMessage = "Could not check location permission. Please type your city manually."
+        }
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard let location = locations.last else {
+            isLocating = false
+            locationMessage = "Could not detect your location. Please type your city manually."
+            return
+        }
+
+        geocoder.reverseGeocodeLocation(location) { [weak self] placemarks, error in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.isLocating = false
+
+                if error != nil {
+                    self.locationMessage = "Could not read your city from location. Please type it manually."
+                    return
+                }
+
+                let placemark = placemarks?.first
+                let city = placemark?.locality
+                    ?? placemark?.subAdministrativeArea
+                    ?? placemark?.administrativeArea
+
+                guard let city, !city.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    self.locationMessage = "Could not detect your city. Please type it manually."
+                    return
+                }
+
+                self.detectedCity = city
+                self.locationMessage = "Using your current city: \(city)."
+            }
+        }
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        isLocating = false
+        locationMessage = "Could not detect your location. Please type your city manually."
+    }
+
+    private func requestLocation() {
+        isLocating = true
+        manager.requestLocation()
     }
 }
