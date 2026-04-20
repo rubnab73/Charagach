@@ -675,7 +675,7 @@ struct CaregiverDetailView: View {
         .alert("Booking Confirmed", isPresented: $showBooked) {
             Button("Great!") {}
         } message: {
-            Text("\(caregiver.name) will care for your plants. You will receive a confirmation shortly.")
+            Text("Your booking request for \(caregiver.name) was saved. Track its status in Profile > My Bookings.")
         }
     }
 

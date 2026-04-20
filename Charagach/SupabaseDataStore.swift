@@ -64,6 +64,7 @@ struct NewReviewInput {
 final class SupabaseDataStore: ObservableObject {
     @Published var listings: [PlantListing] = []
     @Published var caregivers: [Caregiver] = []
+    @Published var careTips: [PlantCareTip] = PlantCareTip.samples
     @Published var errorMessage: String?
 
     func loadListings() async {
@@ -182,7 +183,7 @@ final class SupabaseDataStore: ObservableObject {
         guard let userID = session?.user.id else { throw DataStoreError.notAuthenticated }
 
         let uploadedImageURLs = try await uploadListingImages(input.newImageData, userID: userID)
-        let imageURLs = uploadedImageURLs.isEmpty ? input.existingImageURLs : uploadedImageURLs
+        let imageURLs = Array((input.existingImageURLs + uploadedImageURLs).prefix(5))
 
         let payload = DBListingEditUpdate(
             title: input.name,
@@ -193,7 +194,7 @@ final class SupabaseDataStore: ObservableObject {
             city: input.city,
             phoneNumber: input.phoneNumber,
             description: input.description,
-            imageURL: imageURLs.first,
+            imageURL: imageURLs.first ?? "",
             imageURLs: imageURLs
         )
 
@@ -285,6 +286,38 @@ final class SupabaseDataStore: ObservableObject {
         let decoder = JSONDecoder()
         let rows: [DBProfileCity] = try decodeArray(from: response.data, decoder: decoder)
         return rows.first?.city?.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func loadCareTips() async {
+        do {
+            let response = try await supabase.database
+                .from("plant_care_tips")
+                .select()
+                .eq("published", value: true)
+                .order("created_at", ascending: false)
+                .execute()
+
+            let decoder = JSONDecoder()
+            let rows: [DBPlantCareTip] = try decodeArray(from: response.data, decoder: decoder)
+
+            let mapped = rows.map { row in
+                PlantCareTip(
+                    id: row.id,
+                    title: row.title,
+                    summary: row.summary,
+                    content: row.content,
+                    category: TipCategory(rawValue: row.category) ?? .general,
+                    difficulty: TipDifficulty(rawValue: row.difficulty) ?? .beginner,
+                    readMinutes: max(1, row.readMinutes)
+                )
+            }
+
+            self.careTips = mapped.isEmpty ? PlantCareTip.samples : mapped
+            self.errorMessage = nil
+        } catch {
+            self.errorMessage = error.localizedDescription
+            if careTips.isEmpty { careTips = PlantCareTip.samples }
+        }
     }
 
     func registerCaregiver(_ input: NewCaregiverInput, session: Session?) async throws {
@@ -939,6 +972,37 @@ private struct DBListingProfile: Decodable {
 
 private struct DBProfileCity: Decodable {
     let city: String?
+}
+
+private struct DBPlantCareTip: Decodable {
+    let id: UUID
+    let title: String
+    let summary: String
+    let content: String
+    let category: String
+    let difficulty: String
+    let readMinutes: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case summary
+        case content
+        case category
+        case difficulty
+        case readMinutes = "read_minutes"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        summary = try container.decode(String.self, forKey: .summary)
+        content = try container.decode(String.self, forKey: .content)
+        category = try container.decode(String.self, forKey: .category)
+        difficulty = try container.decode(String.self, forKey: .difficulty)
+        readMinutes = try container.decodeLossyInt(forKey: .readMinutes)
+    }
 }
 
 private struct DBCaregiver: Decodable {

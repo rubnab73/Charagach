@@ -65,6 +65,15 @@ struct PlantListing: Identifiable {
     }
 }
 
+enum ContactUtilities {
+    static func sanitizedPhoneNumber(_ phoneNumber: String?) -> String? {
+        guard let phoneNumber else { return nil }
+        let allowed = CharacterSet(charactersIn: "+0123456789")
+        let filtered = String(phoneNumber.unicodeScalars.filter { allowed.contains($0) })
+        return filtered.isEmpty ? nil : filtered
+    }
+}
+
 enum PlantCategory: String, CaseIterable {
     case all       = "All"
     case indoor    = "Indoor"
@@ -318,6 +327,70 @@ enum TipDifficulty: String {
     case beginner     = "Beginner"
     case intermediate = "Intermediate"
     case advanced     = "Advanced"
+}
+
+// MARK: - Plant Care Reminder
+
+enum PlantCareReminderTask: String, CaseIterable, Codable, Identifiable {
+    case water = "Water"
+    case fertilize = "Fertilize"
+    case repot = "Repot"
+    case prune = "Prune"
+    case other = "Other"
+
+    var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .water: return "drop.fill"
+        case .fertilize: return "leaf.fill"
+        case .repot: return "arrow.up.circle.fill"
+        case .prune: return "scissors"
+        case .other: return "bell.fill"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .water: return .blue
+        case .fertilize: return .green
+        case .repot: return .brown
+        case .prune: return .orange
+        case .other: return .purple
+        }
+    }
+}
+
+struct PlantCareReminder: Identifiable, Codable, Equatable {
+    var id: UUID
+    var plantName: String
+    var task: PlantCareReminderTask
+    var dueDate: Date
+    var notes: String
+    var isCompleted: Bool
+    var createdAt: Date
+
+    init(
+        id: UUID = UUID(),
+        plantName: String,
+        task: PlantCareReminderTask,
+        dueDate: Date,
+        notes: String = "",
+        isCompleted: Bool = false,
+        createdAt: Date = Date()
+    ) {
+        self.id = id
+        self.plantName = plantName
+        self.task = task
+        self.dueDate = dueDate
+        self.notes = notes
+        self.isCompleted = isCompleted
+        self.createdAt = createdAt
+    }
+
+    var notificationID: String {
+        "care-reminder-\(id.uuidString)"
+    }
 }
 
 // MARK: - Sample Data: Plant Listings

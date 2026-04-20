@@ -10,11 +10,18 @@ import SwiftUI
 // MARK: - Plant Care Tips Tab
 
 struct PlantCareView: View {
+    @StateObject private var dataStore = SupabaseDataStore()
     @State private var selectedCategory: TipCategory? = nil
+    @State private var isLoading = false
+    @State private var loadMessage: String?
+
+    private var tips: [PlantCareTip] {
+        dataStore.careTips.isEmpty ? PlantCareTip.samples : dataStore.careTips
+    }
 
     private var filtered: [PlantCareTip] {
-        guard let cat = selectedCategory else { return PlantCareTip.samples }
-        return PlantCareTip.samples.filter { $0.category == cat }
+        guard let cat = selectedCategory else { return tips }
+        return tips.filter { $0.category == cat }
     }
 
     var body: some View {
@@ -52,6 +59,19 @@ struct PlantCareView: View {
                     }
 
                     // ── Tips list ──────────────────────────────────────
+                    if isLoading {
+                        ProgressView("Loading fresh tips...")
+                            .font(.footnote)
+                            .tint(.green)
+                    }
+
+                    if let loadMessage {
+                        Label(loadMessage, systemImage: "wifi.exclamationmark")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal)
+                    }
+
                     VStack(spacing: 12) {
                         ForEach(filtered) { tip in
                             NavigationLink(destination: TipDetailView(tip: tip)) {
@@ -65,6 +85,30 @@ struct PlantCareView: View {
                 .padding(.vertical)
             }
             .navigationTitle("Plant Care Tips")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        Task { await refreshTips() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                }
+            }
+            .task {
+                await refreshTips()
+            }
+        }
+    }
+
+    private func refreshTips() async {
+        isLoading = true
+        defer { isLoading = false }
+
+        await dataStore.loadCareTips()
+        if dataStore.errorMessage == nil {
+            loadMessage = nil
+        } else {
+            loadMessage = "Showing built-in care tips because online tips could not load."
         }
     }
 }

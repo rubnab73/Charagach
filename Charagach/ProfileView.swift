@@ -9,6 +9,7 @@ import SwiftUI
 import Supabase
 import PhotosUI
 import UIKit
+import UserNotifications
 
 // MARK: - Profile Tab
 
@@ -87,8 +88,11 @@ struct ProfileView: View {
                             ProfileMenuNavigationItem(icon: "calendar.badge.checkmark", iconColor: .blue, label: "My Bookings") {
                                 ProfileBookingsView(authViewModel: authViewModel)
                             }
-                            ProfileMenuNavigationItem(icon: "star.fill", iconColor: .yellow, label: "My Reviews", showDivider: false) {
+                            ProfileMenuNavigationItem(icon: "star.fill", iconColor: .yellow, label: "My Reviews") {
                                 ProfileReviewsView(authViewModel: authViewModel)
+                            }
+                            ProfileMenuNavigationItem(icon: "alarm.fill", iconColor: .mint, label: "Care Reminders", showDivider: false) {
+                                CareRemindersView()
                             }
                         }
 
@@ -346,6 +350,14 @@ private struct EditProfileView: View {
                         }
                     }
                     Toggle("I also provide plant sitting", isOn: $viewModel.isCaregiver)
+                    if viewModel.isCaregiver {
+                        Label(
+                            "Complete the Become a Sitter form from the Plant Sitting tab to add your rate, specialties, bio, and availability.",
+                            systemImage: "info.circle"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
                 }
             }
             .navigationTitle("Edit Profile")
@@ -1102,6 +1114,309 @@ private struct LeaveReviewSheet: View {
     }
 }
 
+// MARK: - Care Reminders
+
+private struct CareRemindersView: View {
+    @AppStorage("notifications.care_reminders") private var reminderNotifications = true
+    @State private var reminders: [PlantCareReminder] = []
+    @State private var showAddReminder = false
+    @State private var statusMessage: String?
+
+    private var upcomingReminders: [PlantCareReminder] {
+        reminders
+            .filter { !$0.isCompleted }
+            .sorted { $0.dueDate < $1.dueDate }
+    }
+
+    private var completedReminders: [PlantCareReminder] {
+        reminders
+            .filter(\.isCompleted)
+            .sorted { $0.dueDate > $1.dueDate }
+    }
+
+    var body: some View {
+        Group {
+            if reminders.isEmpty {
+                ProfileEmptyState(
+                    icon: "alarm",
+                    title: "No Care Reminders",
+                    message: "Add watering, fertilizing, repotting, or pruning reminders for your plants."
+                )
+            } else {
+                List {
+                    if !upcomingReminders.isEmpty {
+                        Section("Upcoming") {
+                            ForEach(upcomingReminders) { reminder in
+                                CareReminderRow(reminder: reminder) {
+                                    markCompleted(reminder)
+                                }
+                                .swipeActions(edge: .trailing) {
+                                    Button(role: .destructive) {
+                                        delete(reminder)
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if !completedReminders.isEmpty {
+                        Section("Completed") {
+                            ForEach(completedReminders) { reminder in
+                                CareReminderRow(reminder: reminder, onComplete: nil)
+                                    .swipeActions(edge: .trailing) {
+                                        Button(role: .destructive) {
+                                            delete(reminder)
+                                        } label: {
+                                            Label("Delete", systemImage: "trash")
+                                        }
+                                    }
+                            }
+                        }
+                    }
+                }
+                .listStyle(.insetGrouped)
+            }
+        }
+        .navigationTitle("Care Reminders")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    showAddReminder = true
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .foregroundStyle(.green)
+                }
+            }
+        }
+        .onAppear {
+            reminders = PlantCareReminderStore.load()
+        }
+        .sheet(isPresented: $showAddReminder) {
+            AddCareReminderSheet { reminder in
+                add(reminder)
+            }
+        }
+        .alert("Care Reminders", isPresented: Binding(
+            get: { statusMessage != nil },
+            set: { if !$0 { statusMessage = nil } }
+        )) {
+            Button("OK") { statusMessage = nil }
+        } message: {
+            Text(statusMessage ?? "")
+        }
+    }
+
+    private func add(_ reminder: PlantCareReminder) {
+        reminders.append(reminder)
+        save()
+
+        Task {
+            await scheduleNotificationIfNeeded(for: reminder)
+        }
+    }
+
+    private func markCompleted(_ reminder: PlantCareReminder) {
+        guard let index = reminders.firstIndex(where: { $0.id == reminder.id }) else { return }
+        reminders[index].isCompleted = true
+        save()
+        cancelNotification(for: reminder)
+    }
+
+    private func delete(_ reminder: PlantCareReminder) {
+        reminders.removeAll { $0.id == reminder.id }
+        save()
+        cancelNotification(for: reminder)
+    }
+
+    private func save() {
+        PlantCareReminderStore.save(reminders)
+    }
+
+    @MainActor
+    private func scheduleNotificationIfNeeded(for reminder: PlantCareReminder) async {
+        guard reminderNotifications else {
+            statusMessage = "Reminder saved. Turn on care reminder notifications in Profile > Notifications if you want alerts."
+            return
+        }
+
+        guard reminder.dueDate > Date() else { return }
+
+        do {
+            let center = UNUserNotificationCenter.current()
+            let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
+
+            guard granted else {
+                statusMessage = "Reminder saved. Notifications are off for Charagach, so no alert was scheduled."
+                return
+            }
+
+            let content = UNMutableNotificationContent()
+            content.title = "\(reminder.task.rawValue) \(reminder.plantName)"
+            content.body = reminder.notes.isEmpty ? "Time to care for your plant." : reminder.notes
+            content.sound = .default
+
+            let components = Calendar.current.dateComponents(
+                [.year, .month, .day, .hour, .minute],
+                from: reminder.dueDate
+            )
+            let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+            let request = UNNotificationRequest(
+                identifier: reminder.notificationID,
+                content: content,
+                trigger: trigger
+            )
+
+            try await center.add(request)
+        } catch {
+            statusMessage = "Reminder saved, but the notification could not be scheduled."
+        }
+    }
+
+    private func cancelNotification(for reminder: PlantCareReminder) {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [reminder.notificationID])
+    }
+}
+
+private enum PlantCareReminderStore {
+    private static let key = "care_reminders.items"
+
+    static func load() -> [PlantCareReminder] {
+        guard let data = UserDefaults.standard.data(forKey: key) else { return [] }
+        return (try? JSONDecoder().decode([PlantCareReminder].self, from: data)) ?? []
+    }
+
+    static func save(_ reminders: [PlantCareReminder]) {
+        guard let data = try? JSONEncoder().encode(reminders) else { return }
+        UserDefaults.standard.set(data, forKey: key)
+    }
+}
+
+private struct CareReminderRow: View {
+    let reminder: PlantCareReminder
+    let onComplete: (() -> Void)?
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(reminder.task.color.opacity(0.15))
+                    .frame(width: 42, height: 42)
+                Image(systemName: reminder.task.icon)
+                    .foregroundStyle(reminder.task.color)
+            }
+
+            VStack(alignment: .leading, spacing: 5) {
+                HStack {
+                    Text(reminder.plantName)
+                        .font(.headline)
+                    Spacer()
+                    TagView(text: reminder.task.rawValue, color: reminder.task.color)
+                }
+
+                Text(reminder.dueDate.formatted(date: .abbreviated, time: .shortened))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                if !reminder.notes.isEmpty {
+                    Text(reminder.notes)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let onComplete {
+                    Button("Mark Complete") {
+                        onComplete()
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.green)
+                    .font(.caption)
+                    .padding(.top, 2)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+private struct AddCareReminderSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var plantName = ""
+    @State private var task: PlantCareReminderTask = .water
+    @State private var dueDate = Calendar.current.date(byAdding: .hour, value: 1, to: Date()) ?? Date()
+    @State private var notes = ""
+    @State private var errorMessage: String?
+
+    let onSave: (PlantCareReminder) -> Void
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Plant") {
+                    TextField("Plant name", text: $plantName)
+                    Picker("Task", selection: $task) {
+                        ForEach(PlantCareReminderTask.allCases) { task in
+                            Label(task.rawValue, systemImage: task.icon).tag(task)
+                        }
+                    }
+                }
+
+                Section("Reminder") {
+                    DatePicker(
+                        "Date & Time",
+                        selection: $dueDate,
+                        in: Date()...,
+                        displayedComponents: [.date, .hourAndMinute]
+                    )
+                    TextField("Notes (optional)", text: $notes, axis: .vertical)
+                        .lineLimit(3...5)
+                }
+
+                if let errorMessage {
+                    Section {
+                        Text(errorMessage)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
+            .navigationTitle("Add Reminder")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Save") {
+                        save()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+        }
+    }
+
+    private func save() {
+        let trimmedName = plantName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else {
+            errorMessage = "Please enter the plant name."
+            return
+        }
+
+        let reminder = PlantCareReminder(
+            plantName: trimmedName,
+            task: task,
+            dueDate: dueDate,
+            notes: notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+
+        onSave(reminder)
+        dismiss()
+    }
+}
+
 // MARK: - Notifications
 
 private struct NotificationsSettingsView: View {
@@ -1109,6 +1424,7 @@ private struct NotificationsSettingsView: View {
     @AppStorage("notifications.review_activity") private var reviewActivity = true
     @AppStorage("notifications.marketing") private var marketing = false
     @AppStorage("notifications.daily_tips") private var dailyTips = true
+    @AppStorage("notifications.care_reminders") private var careReminders = true
     @Environment(\.openURL) private var openURL
 
     var body: some View {
@@ -1117,14 +1433,24 @@ private struct NotificationsSettingsView: View {
                 Toggle("Booking updates", isOn: $bookingUpdates)
                 Toggle("Review activity", isOn: $reviewActivity)
                 Toggle("Daily care tips", isOn: $dailyTips)
+                Toggle("Care reminder alerts", isOn: $careReminders)
                 Toggle("Offers and announcements", isOn: $marketing)
+            }
+
+            Section("How These Work") {
+                Text("These preferences are stored on this device. Care reminder alerts use local iPhone notifications when permission is granted.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Text("Booking, review, and offer preferences are saved for future notification features; Charagach does not use a push notification backend yet.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
 
             Section("System") {
                 Button("Open App Notification Settings") {
                     openSettings()
                 }
-                Text("These preferences are stored on this device. Use your iPhone settings to manage push permissions.")
+                Text("Use your iPhone settings to manage system notification permission.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -1213,16 +1539,28 @@ private struct HelpCenterView: View {
             answer: "Choose a caregiver, enter your plant details, pick your dates, and confirm the booking. The caregiver can then confirm or complete it from their bookings list."
         ),
         HelpFAQ(
+            question: "How should I contact a seller safely?",
+            answer: "Use the phone or message option on the listing, confirm the plant condition, agree on a public handover place when possible, and avoid sending money before you are comfortable with the seller."
+        ),
+        HelpFAQ(
             question: "Where can I manage my listings?",
             answer: "Open Profile, then choose My Listings. From there you can edit posts, change status, or delete a listing."
+        ),
+        HelpFAQ(
+            question: "Can I change listing photos after posting?",
+            answer: "Yes. Open Profile, choose My Listings, edit the post, then remove old photos or add new ones before saving."
         ),
         HelpFAQ(
             question: "How do reviews appear?",
             answer: "After a completed booking, the plant owner can leave a review. Caregiver ratings are updated from those submitted reviews."
         ),
         HelpFAQ(
+            question: "How do care reminders work?",
+            answer: "Care reminders are saved on this device. If notification permission is enabled, Charagach can schedule local alerts for your plant tasks."
+        ),
+        HelpFAQ(
             question: "How do I update my profile or sitter status?",
-            answer: "Use Edit Profile to update your personal details. If you enable plant sitting there, the app now keeps your caregiver profile in sync."
+            answer: "Use Edit Profile to update your personal details. To appear as a complete sitter, use Become a Sitter from the Plant Sitting tab and add your rate, bio, specialties, and availability."
         )
     ]
 
@@ -1232,7 +1570,9 @@ private struct HelpCenterView: View {
                 Button("Email Support") {
                     openSupportEmail()
                 }
-                Link("Visit Supabase Project Dashboard", destination: URL(string: "https://supabase.com/dashboard")!)
+                Text("For marketplace, booking, profile, or reminder issues, send a short message with your account email and what happened.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Frequently Asked Questions") {

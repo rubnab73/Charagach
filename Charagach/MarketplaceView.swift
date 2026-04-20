@@ -276,102 +276,6 @@ private struct AddListingView: View {
     }
 }
 
-private struct ListingImagePickerControls: View {
-    @Binding var selectedPhotoItems: [PhotosPickerItem]
-    @Binding var selectedImageData: [Data]
-    @Binding var showCamera: Bool
-    @Binding var errorMessage: String?
-
-    let maxImageCount: Int
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                PhotosPicker(
-                    selection: $selectedPhotoItems,
-                    maxSelectionCount: maxImageCount,
-                    matching: .images,
-                    photoLibrary: .shared()
-                ) {
-                    Label("Choose from Library", systemImage: "photo.on.rectangle")
-                }
-
-                Spacer()
-
-                Button {
-                    openCamera()
-                } label: {
-                    Label("Open Camera", systemImage: "camera.fill")
-                }
-            }
-
-            if selectedImageData.isEmpty {
-                Text("Add up to \(maxImageCount) clear pictures. The first picture appears on the marketplace card.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
-                        ForEach(Array(selectedImageData.enumerated()), id: \.offset) { index, data in
-                            SelectedListingImageThumb(data: data) {
-                                selectedImageData.remove(at: index)
-                                selectedPhotoItems = []
-                            }
-                        }
-                    }
-                    .padding(.vertical, 2)
-                }
-            }
-        }
-    }
-
-    private func openCamera() {
-        guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
-            errorMessage = "Camera is not available on this device."
-            return
-        }
-
-        showCamera = true
-    }
-}
-
-private struct SelectedListingImageThumb: View {
-    let data: Data
-    let onRemove: () -> Void
-
-    var body: some View {
-        ZStack(alignment: .topTrailing) {
-            Group {
-                if let image = UIImage(data: data) {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                } else {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(.green.opacity(0.12))
-                        .overlay {
-                            Image(systemName: "photo")
-                                .foregroundStyle(.green)
-                        }
-                }
-            }
-            .frame(width: 86, height: 86)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-
-            Button {
-                onRemove()
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.title3)
-                    .symbolRenderingMode(.palette)
-                    .foregroundStyle(.white, .black.opacity(0.65))
-            }
-            .buttonStyle(.plain)
-            .padding(4)
-        }
-    }
-}
-
 // MARK: - Category Chip
 
 struct CategoryChip: View {
@@ -675,7 +579,7 @@ struct PlantDetailView: View {
             if sanitizedPhoneNumber == nil {
                 Text("No phone number is available for this seller.")
             } else {
-                Text("Choose how to contact \(listing.sellerName).")
+                Text("Choose how to contact \(listing.sellerName). Charagach will open your Phone or Messages app.")
             }
         }
         .alert("Contact Seller", isPresented: Binding(
@@ -689,10 +593,7 @@ struct PlantDetailView: View {
     }
 
     private var sanitizedPhoneNumber: String? {
-        guard let phoneNumber = listing.phoneNumber else { return nil }
-        let allowed = CharacterSet(charactersIn: "+0123456789")
-        let filtered = String(phoneNumber.unicodeScalars.filter { allowed.contains($0) })
-        return filtered.isEmpty ? nil : filtered
+        ContactUtilities.sanitizedPhoneNumber(listing.phoneNumber)
     }
 
     private func openContactURL(scheme: String, phone: String) {
