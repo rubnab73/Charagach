@@ -67,6 +67,9 @@ final class SupabaseDataStore: ObservableObject {
     @Published var careTips: [PlantCareTip] = PlantCareTip.samples
     @Published var errorMessage: String?
 
+    // NOTE: Move this key to secure config before production release.
+    private let perenualAPIKey = "sk-EVKQ69e7269a2887e16618"
+
     func loadListings() async {
         do {
             let response = try await supabase.database
@@ -309,6 +312,20 @@ final class SupabaseDataStore: ObservableObject {
     }
 
     func loadCareTips() async {
+        // Prefer Perenual free API tips first.
+        if let perenualTips = try? await loadCareTipsFromPerenualAPI(), !perenualTips.isEmpty {
+            self.careTips = perenualTips
+            self.errorMessage = nil
+            return
+        }
+
+        // Prefer free public API tips first so this feature works without Supabase data seeding.
+        if let apiTips = try? await loadCareTipsFromFreeAPI(), !apiTips.isEmpty {
+            self.careTips = apiTips
+            self.errorMessage = nil
+            return
+        }
+
         do {
             let response = try await supabase.database
                 .from("plant_care_tips")
@@ -335,9 +352,135 @@ final class SupabaseDataStore: ObservableObject {
             self.careTips = mapped.isEmpty ? PlantCareTip.samples : mapped
             self.errorMessage = nil
         } catch {
-            self.errorMessage = error.localizedDescription
+            self.errorMessage = "Could not fetch online care tips. Showing built-in tips instead."
             if careTips.isEmpty { careTips = PlantCareTip.samples }
         }
+    }
+
+    private func loadCareTipsFromPerenualAPI() async throws -> [PlantCareTip] {
+        guard !perenualAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let url = URL(string: "https://perenual.com/api/species-care-guide-list?key=\(perenualAPIKey)&page=1")
+        else {
+            return []
+        }
+
+        let data = try await fetchData(from: url, timeout: 8)
+        let response = try JSONDecoder().decode(PerenualCareGuideResponse.self, from: data)
+
+        var tips: [PlantCareTip] = []
+
+        for item in response.data.prefix(10) {
+            for section in item.section {
+                let cleaned = cleanWikipediaText(section.description)
+                guard !cleaned.isEmpty else { continue }
+
+                let category = mapPerenualTypeToTipCategory(section.type)
+                let title = "\(item.commonName) • \(section.type.capitalized)"
+                let summary = String(cleaned.prefix(120))
+                let readMinutes = max(1, min(8, cleaned.count / 220))
+
+                tips.append(
+                    PlantCareTip(
+                        id: UUID(),
+                        title: title,
+                        summary: summary,
+                        content: cleaned,
+                        category: category,
+                        difficulty: .beginner,
+                        readMinutes: readMinutes
+                    )
+                )
+            }
+        }
+
+        return Array(tips.prefix(20))
+    }
+
+    private func mapPerenualTypeToTipCategory(_ rawType: String) -> TipCategory {
+        let type = rawType.lowercased()
+        if type.contains("water") { return .watering }
+        if type.contains("sun") || type.contains("light") { return .sunlight }
+        if type.contains("fertil") || type.contains("feed") { return .fertilizing }
+        if type.contains("pot") || type.contains("soil") || type.contains("repot") { return .repotting }
+        if type.contains("pest") || type.contains("disease") || type.contains("bug") { return .pests }
+        return .general
+    }
+
+    private func loadCareTipsFromFreeAPI() async throws -> [PlantCareTip] {
+        let topics: [(title: String, category: TipCategory)] = [
+            ("Houseplant", .general),
+            ("Irrigation", .watering),
+            ("Sunlight", .sunlight),
+            ("Fertilizer", .fertilizing),
+            ("Potting soil", .repotting),
+            ("Pest (organism)", .pests)
+        ]
+
+        var tips: [PlantCareTip] = []
+
+        for topic in topics {
+            guard let encodedTitle = topic.title.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+                  let summaryURL = URL(string: "https://en.wikipedia.org/api/rest_v1/page/summary/\(encodedTitle)")
+            else {
+                continue
+            }
+
+            do {
+                let summaryData = try await fetchData(from: summaryURL, timeout: 6)
+                let summary = try JSONDecoder().decode(WikipediaSummaryResponse.self, from: summaryData)
+                let cleanedSummary = cleanWikipediaText(summary.extract ?? summary.description ?? "")
+                guard !cleanedSummary.isEmpty else { continue }
+
+                let readMinutes = max(1, min(8, cleanedSummary.count / 220))
+                tips.append(
+                    PlantCareTip(
+                        id: UUID(),
+                        title: (summary.title?.isEmpty == false ? summary.title! : topic.title),
+                        summary: String(cleanedSummary.prefix(120)),
+                        content: cleanedSummary,
+                        category: topic.category,
+                        difficulty: .beginner,
+                        readMinutes: readMinutes
+                    )
+                )
+            } catch {
+                // Skip one article and continue building the rest.
+                continue
+            }
+
+            if tips.count >= 5 { break }
+        }
+
+        // Remove accidental duplicate titles and keep stable order.
+        var seen = Set<String>()
+        let unique = tips.filter { tip in
+            let key = tip.title.lowercased()
+            guard !seen.contains(key) else { return false }
+            seen.insert(key)
+            return true
+        }
+
+        return unique
+    }
+
+    private func fetchData(from url: URL, timeout: TimeInterval) async throws -> Data {
+        var request = URLRequest(url: url)
+        request.timeoutInterval = timeout
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        if let http = response as? HTTPURLResponse,
+           !(200...299).contains(http.statusCode) {
+            throw URLError(.badServerResponse)
+        }
+
+        return data
+    }
+
+    private func cleanWikipediaText(_ text: String) -> String {
+        text
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "  ", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     func registerCaregiver(_ input: NewCaregiverInput, session: Session?) async throws {
@@ -1285,6 +1428,46 @@ private struct DBCaregiverReviewEntry: Decodable {
         comment = try container.decodeIfPresent(String.self, forKey: .comment)
         createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt)
     }
+}
+
+private struct WikipediaSearchResponse: Decodable {
+    let query: WikipediaSearchQuery
+}
+
+private struct WikipediaSearchQuery: Decodable {
+    let search: [WikipediaSearchItem]
+}
+
+private struct WikipediaSearchItem: Decodable {
+    let title: String
+}
+
+private struct WikipediaSummaryResponse: Decodable {
+    let title: String?
+    let extract: String?
+    let description: String?
+}
+
+private struct PerenualCareGuideResponse: Decodable {
+    let data: [PerenualCareGuideItem]
+}
+
+private struct PerenualCareGuideItem: Decodable {
+    let id: Int
+    let commonName: String
+    let section: [PerenualCareGuideSection]
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case commonName = "common_name"
+        case section
+    }
+}
+
+private struct PerenualCareGuideSection: Decodable {
+    let id: Int
+    let type: String
+    let description: String
 }
 
 private extension KeyedDecodingContainer {
