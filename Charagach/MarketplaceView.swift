@@ -16,16 +16,22 @@ struct MarketplaceView: View {
     @StateObject private var dataStore = SupabaseDataStore()
     @State private var searchText = ""
     @State private var selectedCategory: PlantCategory = .all
+    @State private var selectedSort: MarketplaceSortOption = .newest
     @State private var showAddListing = false
 
     var filtered: [PlantListing] {
-        dataStore.listings.filter { listing in
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let matches = dataStore.listings.filter { listing in
             let matchCategory = selectedCategory == .all || listing.category == selectedCategory
-            let matchSearch = searchText.isEmpty
-                || listing.name.localizedCaseInsensitiveContains(searchText)
-                || listing.species.localizedCaseInsensitiveContains(searchText)
+            let matchSearch = query.isEmpty
+                || listing.name.localizedCaseInsensitiveContains(query)
+                || listing.species.localizedCaseInsensitiveContains(query)
+                || listing.location.localizedCaseInsensitiveContains(query)
+                || listing.sellerName.localizedCaseInsensitiveContains(query)
             return matchCategory && matchSearch
         }
+
+        return selectedSort.sort(matches)
     }
 
     var body: some View {
@@ -48,6 +54,12 @@ struct MarketplaceView: View {
                     }
 
                     // ── Results grid ───────────────────────────────────
+                    MarketplaceSortBar(
+                        selectedSort: $selectedSort,
+                        resultCount: filtered.count
+                    )
+                    .padding(.horizontal)
+
                     if filtered.isEmpty {
                         VStack(spacing: 12) {
                             Image(systemName: "magnifyingglass")
@@ -110,6 +122,140 @@ struct MarketplaceView: View {
                 Text(dataStore.errorMessage ?? "")
             }
         }
+    }
+}
+
+private enum MarketplaceSortOption: String, CaseIterable, Identifiable {
+    case newest
+    case locationAZ
+    case locationZA
+    case priceLowToHigh
+    case priceHighToLow
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .newest: return "Newest first"
+        case .locationAZ: return "Location: A to Z"
+        case .locationZA: return "Location: Z to A"
+        case .priceLowToHigh: return "Price: Low to High"
+        case .priceHighToLow: return "Price: High to Low"
+        }
+    }
+
+    var shortTitle: String {
+        switch self {
+        case .newest: return "Newest"
+        case .locationAZ: return "Location A-Z"
+        case .locationZA: return "Location Z-A"
+        case .priceLowToHigh: return "Price Low"
+        case .priceHighToLow: return "Price High"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .newest: return "clock"
+        case .locationAZ, .locationZA: return "mappin.and.ellipse"
+        case .priceLowToHigh: return "arrow.up"
+        case .priceHighToLow: return "arrow.down"
+        }
+    }
+
+    func sort(_ listings: [PlantListing]) -> [PlantListing] {
+        listings.sorted { lhs, rhs in
+            switch self {
+            case .newest:
+                if lhs.postedDaysAgo != rhs.postedDaysAgo {
+                    return lhs.postedDaysAgo < rhs.postedDaysAgo
+                }
+                return Self.nameComesFirst(lhs, rhs)
+
+            case .locationAZ:
+                if let result = Self.compare(lhs.location, rhs.location, ascending: true) {
+                    return result
+                }
+                if lhs.price != rhs.price {
+                    return lhs.price < rhs.price
+                }
+                return Self.nameComesFirst(lhs, rhs)
+
+            case .locationZA:
+                if let result = Self.compare(lhs.location, rhs.location, ascending: false) {
+                    return result
+                }
+                if lhs.price != rhs.price {
+                    return lhs.price < rhs.price
+                }
+                return Self.nameComesFirst(lhs, rhs)
+
+            case .priceLowToHigh:
+                if lhs.price != rhs.price {
+                    return lhs.price < rhs.price
+                }
+                if let result = Self.compare(lhs.location, rhs.location, ascending: true) {
+                    return result
+                }
+                return Self.nameComesFirst(lhs, rhs)
+
+            case .priceHighToLow:
+                if lhs.price != rhs.price {
+                    return lhs.price > rhs.price
+                }
+                if let result = Self.compare(lhs.location, rhs.location, ascending: true) {
+                    return result
+                }
+                return Self.nameComesFirst(lhs, rhs)
+            }
+        }
+    }
+
+    private static func compare(_ lhs: String, _ rhs: String, ascending: Bool) -> Bool? {
+        let result = lhs.localizedCaseInsensitiveCompare(rhs)
+        guard result != .orderedSame else { return nil }
+        return ascending ? result == .orderedAscending : result == .orderedDescending
+    }
+
+    private static func nameComesFirst(_ lhs: PlantListing, _ rhs: PlantListing) -> Bool {
+        if let result = compare(lhs.name, rhs.name, ascending: true) {
+            return result
+        }
+        return lhs.id.uuidString < rhs.id.uuidString
+    }
+}
+
+private struct MarketplaceSortBar: View {
+    @Binding var selectedSort: MarketplaceSortOption
+    let resultCount: Int
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Label(resultSummary, systemImage: "list.bullet")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+
+            Spacer(minLength: 8)
+
+            Menu {
+                ForEach(MarketplaceSortOption.allCases) { option in
+                    Button {
+                        selectedSort = option
+                    } label: {
+                        Label(option.title, systemImage: selectedSort == option ? "checkmark" : option.icon)
+                    }
+                }
+            } label: {
+                Label(selectedSort.shortTitle, systemImage: "arrow.up.arrow.down")
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+            }
+            .tint(.green)
+        }
+    }
+
+    private var resultSummary: String {
+        "\(resultCount) \(resultCount == 1 ? "result" : "results")"
     }
 }
 
