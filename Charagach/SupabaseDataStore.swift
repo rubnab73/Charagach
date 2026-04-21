@@ -245,7 +245,7 @@ final class SupabaseDataStore: ObservableObject {
             let dbProfiles: [DBCaregiverProfile] = try decodeArray(from: profileResponse.data, decoder: decoder)
             let profileByID = Dictionary(uniqueKeysWithValues: dbProfiles.map { ($0.id, $0) })
 
-            let mapped = dbCaregivers.compactMap { row in
+            let mapped: [Caregiver] = dbCaregivers.compactMap { row in
                 let profile = profileByID[row.id]
                 guard profile?.isCaregiver ?? true else { return nil }
                 return Caregiver(
@@ -698,12 +698,12 @@ final class SupabaseDataStore: ObservableObject {
         }
     }
 
-    private func uploadListingImages(_ images: [Data], userID: UUID) async throws -> [String] {
+    nonisolated private func uploadListingImages(_ images: [Data], userID: UUID) async throws -> [String] {
         guard !images.isEmpty else { return [] }
 
         var urls: [String] = []
         for (index, imageData) in images.prefix(5).enumerated() {
-            let compressedData = compressedJPEGData(from: imageData)
+            let compressedData = Self.compressedJPEGData(from: imageData)
             let fileName = "listing-\(Int(Date().timeIntervalSince1970))-\(index)-\(UUID().uuidString).jpg"
             let path = "\(userID.uuidString)/\(fileName)"
 
@@ -724,7 +724,7 @@ final class SupabaseDataStore: ObservableObject {
         return urls
     }
 
-    private func compressedJPEGData(from data: Data) -> Data {
+    nonisolated private static func compressedJPEGData(from data: Data) -> Data {
         guard let image = UIImage(data: data),
               let jpeg = image.jpegData(compressionQuality: 0.82)
         else {

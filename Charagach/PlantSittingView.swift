@@ -196,7 +196,7 @@ struct PlantSittingView: View {
 
     private func loadDefaultNearbyCity() async {
         guard trimmedNearbyCity.isEmpty else { return }
-        guard let city = try? await dataStore.loadCurrentUserCity(session: authViewModel.session), let city, !city.isEmpty else {
+        guard let city = try? await dataStore.loadCurrentUserCity(session: authViewModel.session), !city.isEmpty else {
             return
         }
         nearbyCity = city
