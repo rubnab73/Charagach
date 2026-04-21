@@ -18,9 +18,7 @@ struct ContentView: View {
                 // ── Splash ───
                 // Shown briefly while the .initialSession event fires.
                 VStack(spacing: 16) {
-                    Image(systemName: "leaf.circle.fill")
-                        .font(.system(size: 80))
-                        .foregroundStyle(.green)
+                    CharagachBrandLogo(size: 104)
                     ProgressView()
                         .tint(.green)
                 }
