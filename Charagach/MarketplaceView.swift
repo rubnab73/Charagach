@@ -595,23 +595,13 @@ struct PlantDetailView: View {
                             .foregroundStyle(.green)
                     }
 
-                    // Tags & posted date
+                    // Tags
                     HStack {
                         TagView(text: listing.category.rawValue, color: .green)
                         TagView(text: listing.condition.rawValue, color: conditionColor)
                         if listing.status.lowercased() == "sold" {
                             TagView(text: "Sold", color: .red)
                         }
-                        Spacer()
-                        HStack(spacing: 3) {
-                            Image(systemName: "clock")
-                                .font(.caption)
-                            Text(listing.postedDaysAgo == 1
-                                 ? "1 day ago"
-                                 : "\(listing.postedDaysAgo) days ago")
-                                .font(.caption)
-                        }
-                        .foregroundStyle(.secondary)
                     }
 
                     Divider()

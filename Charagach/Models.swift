@@ -81,7 +81,6 @@ enum PlantCategory: String, CaseIterable {
     case all       = "All"
     case indoor    = "Indoor"
     case outdoor   = "Outdoor"
-    case succulents = "Succulents"
     case tropical  = "Tropical"
     case herbs     = "Herbs"
 
@@ -90,7 +89,6 @@ enum PlantCategory: String, CaseIterable {
         case .all:        return "square.grid.2x2.fill"
         case .indoor:     return "house.fill"
         case .outdoor:    return "sun.max.fill"
-        case .succulents: return "leaf.fill"
         case .tropical:   return "flame.fill"
         case .herbs:      return "cup.and.saucer.fill"
         }
@@ -416,7 +414,7 @@ extension PlantListing {
         ),
         PlantListing(
             name: "Aloe Vera", species: "Aloe barbadensis",
-            price: 800, category: .succulents, condition: .excellent,
+            price: 800, category: .indoor, condition: .excellent,
             sellerName: "Tania Akter", location: "Sylhet",
             description: "Fresh aloe plant with multiple baby plants. Good for skin care and home use.",
             iconName: "staroflife.fill", iconColor: .mint, postedDaysAgo: 2

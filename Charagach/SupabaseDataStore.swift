@@ -904,7 +904,7 @@ final class SupabaseDataStore: ObservableObject {
         switch category {
         case PlantCategory.indoor.rawValue: return "leaf.fill"
         case PlantCategory.outdoor.rawValue: return "sun.max.fill"
-        case PlantCategory.succulents.rawValue: return "circle.hexagongrid.fill"
+        case "Succulents": return "circle.hexagongrid.fill"
         case PlantCategory.tropical.rawValue: return "bird.fill"
         case PlantCategory.herbs.rawValue: return "cup.and.saucer.fill"
         default: return "leaf.fill"
@@ -915,7 +915,7 @@ final class SupabaseDataStore: ObservableObject {
         switch category {
         case PlantCategory.indoor.rawValue: return .green
         case PlantCategory.outdoor.rawValue: return .orange
-        case PlantCategory.succulents.rawValue: return .mint
+        case "Succulents": return .mint
         case PlantCategory.tropical.rawValue: return .pink
         case PlantCategory.herbs.rawValue: return .teal
         default: return .green
@@ -923,16 +923,13 @@ final class SupabaseDataStore: ObservableObject {
     }
 
     private static func daysAgo(from rawDate: String?) -> Int {
-        guard let rawDate else { return 1 }
+        guard let date = parseServerTimestamp(rawDate) else { return 1 }
 
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-
-        let parsedDate = formatter.date(from: rawDate) ?? ISO8601DateFormatter().date(from: rawDate)
-        guard let date = parsedDate else { return 1 }
-
-        let diff = Calendar.current.dateComponents([.day], from: date, to: Date()).day ?? 0
-        return max(1, diff)
+        let calendar = Calendar.current
+        let startOfListingDay = calendar.startOfDay(for: date)
+        let startOfToday = calendar.startOfDay(for: Date())
+        let diff = calendar.dateComponents([.day], from: startOfListingDay, to: startOfToday).day ?? 0
+        return max(0, diff)
     }
 
     private static let dateOnlyFormatter: DateFormatter = {
@@ -949,12 +946,42 @@ final class SupabaseDataStore: ObservableObject {
     }
 
     private static func parseTimestamp(_ value: String?) -> Date? {
-        guard let value else { return nil }
+        parseServerTimestamp(value)
+    }
 
-        let preciseFormatter = ISO8601DateFormatter()
-        preciseFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    private static func parseServerTimestamp(_ value: String?) -> Date? {
+        guard let raw = value?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+            return nil
+        }
 
-        return preciseFormatter.date(from: value) ?? ISO8601DateFormatter().date(from: value)
+        let isoWithFractional = ISO8601DateFormatter()
+        isoWithFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = isoWithFractional.date(from: raw) { return date }
+
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime]
+        if let date = iso.date(from: raw) { return date }
+
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+
+        // PostgREST / PostgreSQL timestamp formats commonly seen in responses.
+        let formats = [
+            "yyyy-MM-dd HH:mm:ss.SSSSSSXXXXX",
+            "yyyy-MM-dd HH:mm:ss.SSSXXXXX",
+            "yyyy-MM-dd HH:mm:ssXXXXX",
+            "yyyy-MM-dd HH:mm:ss.SSSSSS",
+            "yyyy-MM-dd HH:mm:ss"
+        ]
+
+        for format in formats {
+            formatter.dateFormat = format
+            if let date = formatter.date(from: raw) {
+                return date
+            }
+        }
+
+        return nil
     }
 
     private func uniqueBookings(from rows: [DBPlantSittingBooking]) -> [DBPlantSittingBooking] {
