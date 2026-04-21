@@ -11,6 +11,7 @@ import SwiftUI
 
 struct PlantListing: Identifiable {
     let id: UUID
+    let sellerID: UUID?
     let name: String
     let species: String
     let price: Double
@@ -28,6 +29,7 @@ struct PlantListing: Identifiable {
 
     init(
         id: UUID = UUID(),
+        sellerID: UUID? = nil,
         name: String,
         species: String,
         price: Double,
@@ -44,6 +46,7 @@ struct PlantListing: Identifiable {
         status: String = "active"
     ) {
         self.id = id
+        self.sellerID = sellerID
         self.name = name
         self.species = species
         self.price = price

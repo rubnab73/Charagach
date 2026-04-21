@@ -505,6 +505,8 @@ private struct ProfileBookingsView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var selectedFilter = BookingListFilter.all
+    @State private var reviewedBookingIDs: Set<UUID> = []
+    @State private var selectedReviewTarget: ReviewSheetTarget?
 
     private var currentUserID: UUID? {
         authViewModel.session?.user.id
@@ -559,8 +561,12 @@ private struct ProfileBookingsView: View {
                             BookingRow(
                                 booking: booking,
                                 currentUserID: currentUserID,
+                                canLeaveReview: shouldShowOwnerReviewAction(for: booking, currentUserID: currentUserID),
                                 onStatusChange: { status in
                                     Task { await updateStatus(bookingID: booking.id, status: status) }
+                                },
+                                onLeaveReview: {
+                                    selectedReviewTarget = .booking(booking)
                                 }
                             )
                             .listRowSeparator(.hidden)
@@ -587,6 +593,11 @@ private struct ProfileBookingsView: View {
         .task {
             await refresh()
         }
+        .sheet(item: $selectedReviewTarget) { target in
+            LeaveReviewSheet(authViewModel: authViewModel, target: target) {
+                await refresh()
+            }
+        }
         .alert("Bookings", isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
@@ -603,10 +614,23 @@ private struct ProfileBookingsView: View {
 
         do {
             bookings = try await dataStore.loadMyBookings(session: authViewModel.session)
+            do {
+                let reviewCenter = try await dataStore.loadReviewCenter(session: authViewModel.session)
+                reviewedBookingIDs = Set(reviewCenter.given.map(\.bookingID))
+            } catch {
+                // Keep booking list usable even if review center is not available.
+                reviewedBookingIDs = []
+            }
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func shouldShowOwnerReviewAction(for booking: PlantSittingBooking, currentUserID: UUID) -> Bool {
+        booking.role(for: currentUserID) == .owner
+            && booking.status == .completed
+            && !reviewedBookingIDs.contains(booking.id)
     }
 
     private func updateStatus(bookingID: UUID, status: BookingStatus) async {
@@ -630,7 +654,9 @@ private enum BookingListFilter: String, CaseIterable, Identifiable {
 private struct BookingRow: View {
     let booking: PlantSittingBooking
     let currentUserID: UUID
+    let canLeaveReview: Bool
     let onStatusChange: (BookingStatus) -> Void
+    let onLeaveReview: () -> Void
 
     private var role: BookingRole {
         booking.role(for: currentUserID) ?? .owner
@@ -706,6 +732,14 @@ private struct BookingRow: View {
                     onStatusChange(actionStatus)
                 }
                 .buttonStyle(.bordered)
+            }
+
+            if canLeaveReview {
+                Button("Owner Complete & Rate Sitter") {
+                    onLeaveReview()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.green)
             }
         }
         .padding(16)

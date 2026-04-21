@@ -18,6 +18,8 @@ struct PlantSittingView: View {
     @State private var showSaved = false
     @State private var nearbyCity = ""
     @State private var showOnlyNearby = false
+    @State private var currentUserFullName = ""
+    @State private var currentUserCity = ""
 
     private var trimmedNearbyCity: String {
         nearbyCity.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -30,7 +32,12 @@ struct PlantSittingView: View {
 
     private var displayedCaregivers: [Caregiver] {
         let source = showOnlyNearby && !trimmedNearbyCity.isEmpty ? nearbyCaregivers : dataStore.caregivers
-        return source.sorted { lhs, rhs in
+        let currentUserID = authViewModel.session?.user.id
+        let filtered = source.filter { caregiver in
+            guard let currentUserID else { return true }
+            return caregiver.id != currentUserID
+        }
+        return filtered.sorted { lhs, rhs in
             let lhsNearby = !trimmedNearbyCity.isEmpty && locationMatches(lhs.location, city: trimmedNearbyCity)
             let rhsNearby = !trimmedNearbyCity.isEmpty && locationMatches(rhs.location, city: trimmedNearbyCity)
 
@@ -43,6 +50,42 @@ struct PlantSittingView: View {
 
     private var nearbyAvailableCount: Int {
         nearbyCaregivers.filter(\.isAvailable).count
+    }
+
+    private var isCurrentUserCaregiver: Bool {
+        guard let currentUserID = authViewModel.session?.user.id else { return false }
+        return dataStore.caregivers.contains { $0.id == currentUserID }
+    }
+
+    private var currentUserCaregiverProfile: Caregiver? {
+        guard let currentUserID = authViewModel.session?.user.id else { return nil }
+        return dataStore.caregivers.first { $0.id == currentUserID }
+    }
+
+    private var sitterActionTitle: String {
+        isCurrentUserCaregiver ? "Edit Sitter Profile" : "Become a Sitter"
+    }
+
+    private var defaultSitterName: String {
+        if !currentUserFullName.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).isEmpty {
+            return currentUserFullName
+        }
+        if let email = authViewModel.session?.user.email,
+           !email.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).isEmpty {
+            return email
+        }
+        return ""
+    }
+
+    private var defaultSitterLocation: String {
+        if let profile = currentUserCaregiverProfile,
+           !profile.location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return profile.location
+        }
+        if !currentUserCity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return currentUserCity
+        }
+        return trimmedNearbyCity
     }
 
     var body: some View {
@@ -145,17 +188,26 @@ struct PlantSittingView: View {
                     Button {
                         showBecomeSitter = true
                     } label: {
-                        Text("Become a Sitter")
+                        Text(sitterActionTitle)
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(.green)
                     }
                 }
             }
             .sheet(isPresented: $showBecomeSitter) {
-                BecomeSitterView { payload in
+                BecomeSitterView(
+                    initialName: defaultSitterName,
+                    initialLocation: defaultSitterLocation,
+                    initialBio: currentUserCaregiverProfile?.bio ?? "",
+                    initialSpecialties: currentUserCaregiverProfile?.specialties ?? [],
+                    initialYearsExperience: currentUserCaregiverProfile?.yearsExperience,
+                    initialPricePerDay: currentUserCaregiverProfile?.pricePerDay,
+                    initialIsAvailable: currentUserCaregiverProfile?.isAvailable ?? true
+                ) { payload in
                     Task {
                         do {
                             try await dataStore.registerCaregiver(payload, session: authViewModel.session)
+                            await loadCurrentUserProfileDefaults()
                             showSaved = true
                         } catch {
                             dataStore.errorMessage = error.localizedDescription
@@ -165,6 +217,7 @@ struct PlantSittingView: View {
             }
             .task {
                 await dataStore.loadCaregivers()
+                await loadCurrentUserProfileDefaults()
                 await loadDefaultNearbyCity()
             }
             .onAppear {
@@ -191,6 +244,19 @@ struct PlantSittingView: View {
             } message: {
                 Text("Your sitter profile has been saved.")
             }
+        }
+    }
+
+    private func loadCurrentUserProfileDefaults() async {
+        guard authViewModel.session != nil else { return }
+        guard let profile = try? await dataStore.loadCurrentUserProfile(session: authViewModel.session) else { return }
+
+        if let fullName = profile.fullName?.trimmingCharacters(in: .whitespacesAndNewlines), !fullName.isEmpty {
+            currentUserFullName = fullName
+        }
+
+        if let city = profile.city?.trimmingCharacters(in: .whitespacesAndNewlines), !city.isEmpty {
+            currentUserCity = city
         }
     }
 
@@ -307,7 +373,43 @@ private struct BecomeSitterView: View {
     @State private var isAvailable = true
     @State private var errorMessage: String?
 
+    private let initialName: String
+    private let initialLocation: String
+    private let initialBio: String
+    private let initialSpecialties: [String]
+    private let initialYearsExperience: Int?
+    private let initialPricePerDay: Double?
+    private let initialIsAvailable: Bool
+
     let onSave: (NewCaregiverInput) -> Void
+
+    init(
+        initialName: String = "",
+        initialLocation: String = "",
+        initialBio: String = "",
+        initialSpecialties: [String] = [],
+        initialYearsExperience: Int? = nil,
+        initialPricePerDay: Double? = nil,
+        initialIsAvailable: Bool = true,
+        onSave: @escaping (NewCaregiverInput) -> Void
+    ) {
+        self.initialName = initialName
+        self.initialLocation = initialLocation
+        self.initialBio = initialBio
+        self.initialSpecialties = initialSpecialties
+        self.initialYearsExperience = initialYearsExperience
+        self.initialPricePerDay = initialPricePerDay
+        self.initialIsAvailable = initialIsAvailable
+        self.onSave = onSave
+
+        _name = State(initialValue: initialName)
+        _location = State(initialValue: initialLocation)
+        _bio = State(initialValue: initialBio)
+        _specialtiesInput = State(initialValue: initialSpecialties.joined(separator: ", "))
+        _yearsExperience = State(initialValue: initialYearsExperience.map(String.init) ?? "")
+        _pricePerDay = State(initialValue: initialPricePerDay.map { String(Int($0)) } ?? "")
+        _isAvailable = State(initialValue: initialIsAvailable)
+    }
 
     var body: some View {
         NavigationStack {
@@ -338,6 +440,29 @@ private struct BecomeSitterView: View {
             }
             .navigationTitle("Become a Sitter")
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    name = initialName
+                }
+                if location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    location = initialLocation
+                }
+                if bio.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    bio = initialBio
+                }
+                if specialtiesInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    specialtiesInput = initialSpecialties.joined(separator: ", ")
+                }
+                if yearsExperience.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                   let initialYearsExperience {
+                    yearsExperience = String(initialYearsExperience)
+                }
+                if pricePerDay.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                   let initialPricePerDay {
+                    pricePerDay = String(Int(initialPricePerDay))
+                }
+                isAvailable = initialIsAvailable
+            }
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") { dismiss() }
@@ -513,6 +638,10 @@ struct CaregiverDetailView: View {
         Double(nights) * caregiver.pricePerDay
     }
 
+    private var isSelfCaregiver: Bool {
+        authViewModel.session?.user.id == caregiver.id
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
@@ -636,15 +765,15 @@ struct CaregiverDetailView: View {
                                 .tint(.white)
                                 .scaleEffect(0.85)
                         }
-                        Text(caregiver.isAvailable ? "Confirm Booking" : "Unavailable")
+                        Text(isSelfCaregiver ? "Your Sitter Profile" : (caregiver.isAvailable ? "Confirm Booking" : "Unavailable"))
                             .fontWeight(.semibold)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 4)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(caregiver.isAvailable ? .green : .gray)
-                .disabled(!caregiver.isAvailable || isSavingBooking)
+                .tint(caregiver.isAvailable && !isSelfCaregiver ? .green : .gray)
+                .disabled(!caregiver.isAvailable || isSavingBooking || isSelfCaregiver)
                 .padding(.horizontal)
                 .padding(.bottom, 24)
             }
@@ -681,6 +810,10 @@ struct CaregiverDetailView: View {
 
     private func startBookingFlow() {
         guard caregiver.isAvailable else { return }
+        guard !isSelfCaregiver else {
+            bookingErrorMessage = "You cannot book yourself as a sitter."
+            return
+        }
         guard authViewModel.session != nil else {
             bookingErrorMessage = "Please sign in first."
             return

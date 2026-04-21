@@ -88,6 +88,7 @@ final class SupabaseDataStore: ObservableObject {
             let mapped = dbListings.map { row in
                 PlantListing(
                     id: row.id,
+                    sellerID: row.sellerId,
                     name: row.title,
                     species: row.species,
                     price: row.price,
@@ -161,6 +162,7 @@ final class SupabaseDataStore: ObservableObject {
         return rows.map { row in
             PlantListing(
                 id: row.id,
+                sellerID: row.sellerId,
                 name: row.title,
                 species: row.species,
                 price: row.price,
@@ -286,6 +288,24 @@ final class SupabaseDataStore: ObservableObject {
         let decoder = JSONDecoder()
         let rows: [DBProfileCity] = try decodeArray(from: response.data, decoder: decoder)
         return rows.first?.city?.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func loadCurrentUserProfile(session: Session?) async throws -> (fullName: String?, city: String?, isCaregiver: Bool?)? {
+        guard let userID = session?.user.id else {
+            throw DataStoreError.notAuthenticated
+        }
+
+        let response = try await supabase.database
+            .from("profiles")
+            .select("id, full_name, city, is_caregiver")
+            .eq("id", value: userID.uuidString)
+            .limit(1)
+            .execute()
+
+        let decoder = JSONDecoder()
+        let rows: [DBCaregiverProfile] = try decodeArray(from: response.data, decoder: decoder)
+        guard let row = rows.first else { return nil }
+        return (row.fullName, row.city, row.isCaregiver)
     }
 
     func loadCareTips() async {
@@ -425,6 +445,10 @@ final class SupabaseDataStore: ObservableObject {
     func createBooking(_ input: NewBookingInput, session: Session?) async throws {
         guard let userID = session?.user.id else {
             throw DataStoreError.notAuthenticated
+        }
+
+        guard input.caregiverID != userID else {
+            throw DataStoreError.invalidBooking("You cannot book yourself as a sitter.")
         }
 
         let trimmedPlantName = input.plantName.trimmingCharacters(in: .whitespacesAndNewlines)
