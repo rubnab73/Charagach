@@ -17,7 +17,6 @@ The authentication flow supports:
 - User registration
 - User sign in
 - User sign out
-- Password reset
 
 This flow is implemented and currently functional.
 
@@ -89,32 +88,28 @@ Planned enhancements include:
 ## Screenshots of the App
 The following screenshots are included for reference.
 
-### 1. Marketplace Screen
-![Marketplace Screen](marketplace.png)
-
-### 2. Add Listing Screen
-![Add Listing Screen](add_listing.png)
-
-### 3. My Listings Screen
-![My Listings Screen](my_listing.png)
-
-### 4. Plant Sitting Screen
-![Plant Sitting Screen](plant_sitting.png)
-
-### 5. Become Sitter Screen
-![Become Sitter Screen](become_sitter.png)
-
-### 6. Care Reminder Screen
-![Care Reminder Screen](care_reminder.png)
-
-### 7. Plant Care Screen
-![Plant Care Screen](plant_care_tips.png)
-
-### 8. Profile Screen
-![Profile Screen](profile.png)
-
-### 9. Edit Profile Screen
-![Edit Profile Screen](edit_profile.png)
+<table>
+	<tr>
+		<td align="center"><img src="sign_in.png" alt="Login Screen" width="250" /><br/>Login Screen</td>
+		<td align="center"><img src="sign_up.png" alt="Sign Up Screen" width="250" /><br/>Sign Up Screen</td>
+		<td align="center"><img src="marketplace.png" alt="Marketplace Screen" width="250" /><br/>Marketplace Screen</td>
+	</tr>
+	<tr>
+		<td align="center"><img src="add_listing.png" alt="Add Listing Screen" width="250" /><br/>Add Listing Screen</td>
+		<td align="center"><img src="my_listing.png" alt="My Listings Screen" width="250" /><br/>My Listings Screen</td>
+		<td align="center"><img src="plant_sitting.png" alt="Plant Sitting Screen" width="250" /><br/>Plant Sitting Screen</td>
+	</tr>
+	<tr>
+		<td align="center"><img src="become_sitter.png" alt="Become Sitter Screen" width="250" /><br/>Become Sitter Screen</td>
+		<td align="center"><img src="care_reminder.png" alt="Care Reminder Screen" width="250" /><br/>Care Reminder Screen</td>
+		<td align="center"><img src="caregiver_page.png" alt="Caregiver Detail Screen" width="250" /><br/>Caregiver Detail Screen</td>
+	</tr>
+	<tr>
+		<td align="center"><img src="plant_care_tips.png" alt="Plant Care Screen" width="250" /><br/>Plant Care Screen</td>
+		<td align="center"><img src="profile.png" alt="Profile Screen" width="250" /><br/>Profile Screen</td>
+		<td align="center"><img src="edit_profile.png" alt="Edit Profile Screen" width="250" /><br/>Edit Profile Screen</td>
+	</tr>
+</table>
 
 ## Conclusion
 Charagach demonstrates a solid SwiftUI and Supabase architecture for a plant marketplace and care service app. The current version covers authentication, plant listing management, caregiver registration, profile editing, and plant care content. With booking persistence, messaging, dynamic content, and image upload improvements, it can become a more complete platform for plant lovers.
