@@ -27,9 +27,7 @@ struct LoginView: View {
 
                 // ── Header ──────────────────────────────────────────────
                 VStack(spacing: 10) {
-                    Image(systemName: "leaf.circle.fill")
-                        .font(.system(size: 80))
-                        .foregroundStyle(.green)
+                    CharagachBrandLogo(size: 112)
 
                     Text("Charagach")
                         .font(.largeTitle.bold())
@@ -154,6 +152,18 @@ struct LoginView: View {
         .sheet(isPresented: $showForgotPassword) {
             ForgotPasswordView(authViewModel: authViewModel)
         }
+    }
+}
+
+struct CharagachBrandLogo: View {
+    let size: CGFloat
+
+    var body: some View {
+        Image("CharagachLogo")
+            .resizable()
+            .scaledToFit()
+            .frame(width: size, height: size)
+            .accessibilityLabel("Charagach logo")
     }
 }
 
