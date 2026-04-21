@@ -11,12 +11,7 @@ import SwiftUI
 struct HomeView: View {
     @ObservedObject var authViewModel: AuthViewModel
 
-    private var plantSittingTabIcon: String {
-        if #available(iOS 17.0, *) {
-            return "hands.and.sparkles.fill"
-        }
-        return "leaf.circle.fill"
-    }
+    private let plantSittingTabIcon = "person.2.fill"
 
     var body: some View {
         TabView {

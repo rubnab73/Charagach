@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Foundation
 
 // MARK: - Plant Listing (Marketplace)
 
@@ -24,6 +25,7 @@ struct PlantListing: Identifiable {
     let imageURLs: [String]
     let iconName: String
     let iconColor: Color
+    let createdAt: Date?
     let postedDaysAgo: Int
     let status: String
 
@@ -42,6 +44,7 @@ struct PlantListing: Identifiable {
         imageURLs: [String] = [],
         iconName: String,
         iconColor: Color,
+        createdAt: Date? = nil,
         postedDaysAgo: Int,
         status: String = "active"
     ) {
@@ -59,6 +62,7 @@ struct PlantListing: Identifiable {
         self.imageURLs = imageURLs
         self.iconName = iconName
         self.iconColor = iconColor
+        self.createdAt = createdAt
         self.postedDaysAgo = postedDaysAgo
         self.status = status
     }

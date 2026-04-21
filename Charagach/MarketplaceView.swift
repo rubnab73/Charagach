@@ -167,6 +167,9 @@ private enum MarketplaceSortOption: String, CaseIterable, Identifiable {
         listings.sorted { lhs, rhs in
             switch self {
             case .newest:
+                if let lhsDate = lhs.createdAt, let rhsDate = rhs.createdAt, lhsDate != rhsDate {
+                    return lhsDate > rhsDate
+                }
                 if lhs.postedDaysAgo != rhs.postedDaysAgo {
                     return lhs.postedDaysAgo < rhs.postedDaysAgo
                 }
@@ -228,6 +231,7 @@ private enum MarketplaceSortOption: String, CaseIterable, Identifiable {
 private struct MarketplaceSortBar: View {
     @Binding var selectedSort: MarketplaceSortOption
     let resultCount: Int
+    @State private var showSortOptions = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -237,21 +241,33 @@ private struct MarketplaceSortBar: View {
 
             Spacer(minLength: 8)
 
-            Menu {
+            Button {
+                showSortOptions = true
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.up.arrow.down")
+                    Text(selectedSort.shortTitle)
+                        .lineLimit(1)
+                }
+                .font(.subheadline.weight(.semibold))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(.green.opacity(0.12), in: Capsule())
+                .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.green)
+            .confirmationDialog("Sort listings", isPresented: $showSortOptions, titleVisibility: .visible) {
                 ForEach(MarketplaceSortOption.allCases) { option in
-                    Button {
+                    Button(option.title) {
                         selectedSort = option
-                    } label: {
-                        Label(option.title, systemImage: selectedSort == option ? "checkmark" : option.icon)
                     }
                 }
-            } label: {
-                Label(selectedSort.shortTitle, systemImage: "arrow.up.arrow.down")
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
+                Button("Cancel", role: .cancel) {}
             }
-            .tint(.green)
         }
+        .contentShape(Rectangle())
+        .zIndex(2)
     }
 
     private var resultSummary: String {
