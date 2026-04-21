@@ -11,6 +11,7 @@ import SwiftUI
 
 struct PlantListing: Identifiable {
     let id: UUID
+    let sellerID: UUID?
     let name: String
     let species: String
     let price: Double
@@ -20,6 +21,7 @@ struct PlantListing: Identifiable {
     let location: String
     let description: String
     let phoneNumber: String?
+    let imageURLs: [String]
     let iconName: String
     let iconColor: Color
     let postedDaysAgo: Int
@@ -27,6 +29,7 @@ struct PlantListing: Identifiable {
 
     init(
         id: UUID = UUID(),
+        sellerID: UUID? = nil,
         name: String,
         species: String,
         price: Double,
@@ -36,12 +39,14 @@ struct PlantListing: Identifiable {
         location: String,
         description: String,
         phoneNumber: String? = nil,
+        imageURLs: [String] = [],
         iconName: String,
         iconColor: Color,
         postedDaysAgo: Int,
         status: String = "active"
     ) {
         self.id = id
+        self.sellerID = sellerID
         self.name = name
         self.species = species
         self.price = price
@@ -51,10 +56,24 @@ struct PlantListing: Identifiable {
         self.location = location
         self.description = description
         self.phoneNumber = phoneNumber
+        self.imageURLs = imageURLs
         self.iconName = iconName
         self.iconColor = iconColor
         self.postedDaysAgo = postedDaysAgo
         self.status = status
+    }
+
+    var primaryImageURL: String? {
+        imageURLs.first
+    }
+}
+
+enum ContactUtilities {
+    static func sanitizedPhoneNumber(_ phoneNumber: String?) -> String? {
+        guard let phoneNumber else { return nil }
+        let allowed = CharacterSet(charactersIn: "+0123456789")
+        let filtered = String(phoneNumber.unicodeScalars.filter { allowed.contains($0) })
+        return filtered.isEmpty ? nil : filtered
     }
 }
 
@@ -62,7 +81,6 @@ enum PlantCategory: String, CaseIterable {
     case all       = "All"
     case indoor    = "Indoor"
     case outdoor   = "Outdoor"
-    case succulents = "Succulents"
     case tropical  = "Tropical"
     case herbs     = "Herbs"
 
@@ -71,7 +89,6 @@ enum PlantCategory: String, CaseIterable {
         case .all:        return "square.grid.2x2.fill"
         case .indoor:     return "house.fill"
         case .outdoor:    return "sun.max.fill"
-        case .succulents: return "leaf.fill"
         case .tropical:   return "flame.fill"
         case .herbs:      return "cup.and.saucer.fill"
         }
@@ -124,6 +141,126 @@ struct Caregiver: Identifiable {
         self.avatarColor = avatarColor
         self.isAvailable = isAvailable
     }
+}
+
+enum BookingStatus: String {
+    case pending = "pending"
+    case confirmed = "confirmed"
+    case completed = "completed"
+    case cancelled = "cancelled"
+
+    var title: String {
+        switch self {
+        case .pending: return "Pending"
+        case .confirmed: return "Confirmed"
+        case .completed: return "Completed"
+        case .cancelled: return "Cancelled"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .pending: return .orange
+        case .confirmed: return .blue
+        case .completed: return .green
+        case .cancelled: return .red
+        }
+    }
+}
+
+enum BookingRole: String, CaseIterable {
+    case owner = "Owner"
+    case caregiver = "Caregiver"
+}
+
+struct PlantSittingBooking: Identifiable {
+    let id: UUID
+    let ownerID: UUID
+    let caregiverID: UUID
+    let ownerName: String
+    let caregiverName: String
+    let plantName: String
+    let notes: String
+    let startDate: Date
+    let endDate: Date
+    let totalPrice: Double
+    let status: BookingStatus
+    let createdAt: Date?
+
+    init(
+        id: UUID,
+        ownerID: UUID,
+        caregiverID: UUID,
+        ownerName: String,
+        caregiverName: String,
+        plantName: String,
+        notes: String,
+        startDate: Date,
+        endDate: Date,
+        totalPrice: Double,
+        status: BookingStatus,
+        createdAt: Date?
+    ) {
+        self.id = id
+        self.ownerID = ownerID
+        self.caregiverID = caregiverID
+        self.ownerName = ownerName
+        self.caregiverName = caregiverName
+        self.plantName = plantName
+        self.notes = notes
+        self.startDate = startDate
+        self.endDate = endDate
+        self.totalPrice = totalPrice
+        self.status = status
+        self.createdAt = createdAt
+    }
+
+    var displayPlantName: String {
+        plantName.isEmpty ? "Plant sitting booking" : plantName
+    }
+
+    var stayLength: Int {
+        max(1, Calendar.current.dateComponents([.day], from: startDate, to: endDate).day ?? 1)
+    }
+
+    func role(for userID: UUID) -> BookingRole? {
+        if ownerID == userID { return .owner }
+        if caregiverID == userID { return .caregiver }
+        return nil
+    }
+
+    func counterpartName(for userID: UUID) -> String {
+        ownerID == userID ? caregiverName : ownerName
+    }
+}
+
+struct CaregiverReviewEntry: Identifiable {
+    let id: UUID
+    let bookingID: UUID
+    let caregiverID: UUID
+    let reviewerID: UUID
+    let caregiverName: String
+    let reviewerName: String
+    let plantName: String
+    let rating: Double
+    let comment: String
+    let createdAt: Date?
+}
+
+struct ReviewCenterData {
+    let receivedSummaryRating: Double
+    let receivedSummaryCount: Int
+    let pending: [PlantSittingBooking]
+    let received: [CaregiverReviewEntry]
+    let given: [CaregiverReviewEntry]
+
+    static let empty = ReviewCenterData(
+        receivedSummaryRating: 0,
+        receivedSummaryCount: 0,
+        pending: [],
+        received: [],
+        given: []
+    )
 }
 
 // MARK: - Plant Care Tip
@@ -193,6 +330,70 @@ enum TipDifficulty: String {
     case advanced     = "Advanced"
 }
 
+// MARK: - Plant Care Reminder
+
+enum PlantCareReminderTask: String, CaseIterable, Codable, Identifiable {
+    case water = "Water"
+    case fertilize = "Fertilize"
+    case repot = "Repot"
+    case prune = "Prune"
+    case other = "Other"
+
+    var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .water: return "drop.fill"
+        case .fertilize: return "leaf.fill"
+        case .repot: return "arrow.up.circle.fill"
+        case .prune: return "scissors"
+        case .other: return "bell.fill"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .water: return .blue
+        case .fertilize: return .green
+        case .repot: return .brown
+        case .prune: return .orange
+        case .other: return .purple
+        }
+    }
+}
+
+struct PlantCareReminder: Identifiable, Codable, Equatable {
+    var id: UUID
+    var plantName: String
+    var task: PlantCareReminderTask
+    var dueDate: Date
+    var notes: String
+    var isCompleted: Bool
+    var createdAt: Date
+
+    init(
+        id: UUID = UUID(),
+        plantName: String,
+        task: PlantCareReminderTask,
+        dueDate: Date,
+        notes: String = "",
+        isCompleted: Bool = false,
+        createdAt: Date = Date()
+    ) {
+        self.id = id
+        self.plantName = plantName
+        self.task = task
+        self.dueDate = dueDate
+        self.notes = notes
+        self.isCompleted = isCompleted
+        self.createdAt = createdAt
+    }
+
+    var notificationID: String {
+        "care-reminder-\(id.uuidString)"
+    }
+}
+
 // MARK: - Sample Data: Plant Listings
 
 extension PlantListing {
@@ -213,7 +414,7 @@ extension PlantListing {
         ),
         PlantListing(
             name: "Aloe Vera", species: "Aloe barbadensis",
-            price: 800, category: .succulents, condition: .excellent,
+            price: 800, category: .indoor, condition: .excellent,
             sellerName: "Tania Akter", location: "Sylhet",
             description: "Fresh aloe plant with multiple baby plants. Good for skin care and home use.",
             iconName: "staroflife.fill", iconColor: .mint, postedDaysAgo: 2

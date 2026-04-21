@@ -6,21 +6,92 @@
 //
 
 import SwiftUI
+import CoreLocation
 
 // MARK: - Plant Sitting Tab
 
 struct PlantSittingView: View {
     @ObservedObject var authViewModel: AuthViewModel
     @StateObject private var dataStore = SupabaseDataStore()
+    @StateObject private var locationManager = NearbyLocationManager()
     @State private var showBecomeSitter = false
     @State private var showSaved = false
+    @State private var nearbyCity = ""
+    @State private var showOnlyNearby = false
+    @State private var currentUserFullName = ""
+    @State private var currentUserCity = ""
+
+    private var trimmedNearbyCity: String {
+        nearbyCity.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var nearbyCaregivers: [Caregiver] {
+        guard !trimmedNearbyCity.isEmpty else { return [] }
+        return dataStore.caregivers.filter { locationMatches($0.location, city: trimmedNearbyCity) }
+    }
+
+    private var displayedCaregivers: [Caregiver] {
+        let source = showOnlyNearby && !trimmedNearbyCity.isEmpty ? nearbyCaregivers : dataStore.caregivers
+        let currentUserID = authViewModel.session?.user.id
+        let filtered = source.filter { caregiver in
+            guard let currentUserID else { return true }
+            return caregiver.id != currentUserID
+        }
+        return filtered.sorted { lhs, rhs in
+            let lhsNearby = !trimmedNearbyCity.isEmpty && locationMatches(lhs.location, city: trimmedNearbyCity)
+            let rhsNearby = !trimmedNearbyCity.isEmpty && locationMatches(rhs.location, city: trimmedNearbyCity)
+
+            if lhsNearby != rhsNearby { return lhsNearby && !rhsNearby }
+            if lhs.isAvailable != rhs.isAvailable { return lhs.isAvailable && !rhs.isAvailable }
+            if lhs.rating != rhs.rating { return lhs.rating > rhs.rating }
+            return lhs.name < rhs.name
+        }
+    }
+
+    private var nearbyAvailableCount: Int {
+        nearbyCaregivers.filter(\.isAvailable).count
+    }
+
+    private var isCurrentUserCaregiver: Bool {
+        guard let currentUserID = authViewModel.session?.user.id else { return false }
+        return dataStore.caregivers.contains { $0.id == currentUserID }
+    }
+
+    private var currentUserCaregiverProfile: Caregiver? {
+        guard let currentUserID = authViewModel.session?.user.id else { return nil }
+        return dataStore.caregivers.first { $0.id == currentUserID }
+    }
+
+    private var sitterActionTitle: String {
+        isCurrentUserCaregiver ? "Edit Sitter Profile" : "Become a Sitter"
+    }
+
+    private var defaultSitterName: String {
+        if !currentUserFullName.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).isEmpty {
+            return currentUserFullName
+        }
+        if let email = authViewModel.session?.user.email,
+           !email.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).isEmpty {
+            return email
+        }
+        return ""
+    }
+
+    private var defaultSitterLocation: String {
+        if let profile = currentUserCaregiverProfile,
+           !profile.location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return profile.location
+        }
+        if !currentUserCity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return currentUserCity
+        }
+        return trimmedNearbyCity
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
-
-                    // ── Hero banner ────────────────────────────────────
                     ZStack(alignment: .leading) {
                         RoundedRectangle(cornerRadius: 18)
                             .fill(
@@ -30,6 +101,7 @@ struct PlantSittingView: View {
                                     endPoint: .bottomTrailing
                                 )
                             )
+
                         HStack {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text("Plant Sitting")
@@ -49,7 +121,6 @@ struct PlantSittingView: View {
                     }
                     .padding(.horizontal)
 
-                    // ── How it works ───────────────────────────────────
                     HStack(spacing: 0) {
                         HowItWorksStep(number: "1", icon: "magnifyingglass", label: "Browse\nCaregivers")
                         Divider().frame(height: 40)
@@ -60,24 +131,52 @@ struct PlantSittingView: View {
                     .background(.green.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
                     .padding(.horizontal)
 
-                    // ── Caregiver list ─────────────────────────────────
+                    NearbyCaregiverCheck(
+                        city: $nearbyCity,
+                        showOnlyNearby: $showOnlyNearby,
+                        nearbyCount: nearbyCaregivers.count,
+                        nearbyAvailableCount: nearbyAvailableCount,
+                        isLocating: locationManager.isLocating,
+                        locationMessage: locationManager.locationMessage,
+                        onUseCurrentLocation: {
+                            locationManager.requestCurrentCity()
+                        }
+                    )
+                    .padding(.horizontal)
+
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
                             Text("Available Caregivers")
                                 .font(.headline)
                             Spacer()
-                            Text("\(dataStore.caregivers.filter(\.isAvailable).count) available")
+                            Text("\(displayedCaregivers.filter(\.isAvailable).count) available")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         .padding(.horizontal)
 
-                        ForEach(dataStore.caregivers) { caregiver in
-                            NavigationLink(destination: CaregiverDetailView(caregiver: caregiver)) {
-                                CaregiverCard(caregiver: caregiver)
+                        if displayedCaregivers.isEmpty {
+                            VStack(spacing: 10) {
+                                Image(systemName: "location.slash")
+                                    .font(.system(size: 34))
+                                    .foregroundStyle(.secondary)
+                                Text("No nearby caregivers found")
+                                    .font(.headline)
+                                Text("Try another city or show all caregivers.")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
                             }
-                            .buttonStyle(.plain)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 28)
                             .padding(.horizontal)
+                        } else {
+                            ForEach(displayedCaregivers) { caregiver in
+                                NavigationLink(destination: CaregiverDetailView(caregiver: caregiver, authViewModel: authViewModel)) {
+                                    CaregiverCard(caregiver: caregiver)
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.horizontal)
+                            }
                         }
                     }
                 }
@@ -89,17 +188,26 @@ struct PlantSittingView: View {
                     Button {
                         showBecomeSitter = true
                     } label: {
-                        Text("Become a Sitter")
+                        Text(sitterActionTitle)
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(.green)
                     }
                 }
             }
             .sheet(isPresented: $showBecomeSitter) {
-                BecomeSitterView { payload in
+                BecomeSitterView(
+                    initialName: defaultSitterName,
+                    initialLocation: defaultSitterLocation,
+                    initialBio: currentUserCaregiverProfile?.bio ?? "",
+                    initialSpecialties: currentUserCaregiverProfile?.specialties ?? [],
+                    initialYearsExperience: currentUserCaregiverProfile?.yearsExperience,
+                    initialPricePerDay: currentUserCaregiverProfile?.pricePerDay,
+                    initialIsAvailable: currentUserCaregiverProfile?.isAvailable ?? true
+                ) { payload in
                     Task {
                         do {
                             try await dataStore.registerCaregiver(payload, session: authViewModel.session)
+                            await loadCurrentUserProfileDefaults()
                             showSaved = true
                         } catch {
                             dataStore.errorMessage = error.localizedDescription
@@ -109,6 +217,19 @@ struct PlantSittingView: View {
             }
             .task {
                 await dataStore.loadCaregivers()
+                await loadCurrentUserProfileDefaults()
+                await loadDefaultNearbyCity()
+            }
+            .onAppear {
+                // Refresh on tab revisit so updated caregiver ratings are not shown from stale state.
+                Task { await dataStore.loadCaregivers() }
+            }
+            .onChange(of: locationManager.detectedCity) { detectedCity in
+                // Nearby filtering already works by city; CoreLocation only fills this field safely.
+                if let detectedCity, !detectedCity.isEmpty {
+                    nearbyCity = detectedCity
+                    showOnlyNearby = true
+                }
             }
             .alert("Plant Sitting", isPresented: Binding(
                 get: { dataStore.errorMessage != nil },
@@ -124,6 +245,117 @@ struct PlantSittingView: View {
                 Text("Your sitter profile has been saved.")
             }
         }
+    }
+
+    private func loadCurrentUserProfileDefaults() async {
+        guard authViewModel.session != nil else { return }
+        guard let profile = try? await dataStore.loadCurrentUserProfile(session: authViewModel.session) else { return }
+
+        if let fullName = profile.fullName?.trimmingCharacters(in: .whitespacesAndNewlines), !fullName.isEmpty {
+            currentUserFullName = fullName
+        }
+
+        if let city = profile.city?.trimmingCharacters(in: .whitespacesAndNewlines), !city.isEmpty {
+            currentUserCity = city
+        }
+    }
+
+    private func loadDefaultNearbyCity() async {
+        guard trimmedNearbyCity.isEmpty else { return }
+        guard let city = try? await dataStore.loadCurrentUserCity(session: authViewModel.session), !city.isEmpty else {
+            return
+        }
+        nearbyCity = city
+    }
+
+    private func locationMatches(_ location: String, city: String) -> Bool {
+        let normalizedLocation = normalizeLocation(location)
+        let normalizedCity = normalizeLocation(city)
+        guard !normalizedLocation.isEmpty, !normalizedCity.isEmpty else { return false }
+
+        let locationParts = normalizedLocation
+            .split(separator: ",")
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+
+        return locationParts.contains(normalizedCity)
+            || normalizedLocation == normalizedCity
+            || normalizedLocation.hasPrefix("\(normalizedCity),")
+    }
+
+    private func normalizeLocation(_ value: String) -> String {
+        value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .lowercased()
+    }
+}
+
+private struct NearbyCaregiverCheck: View {
+    @Binding var city: String
+    @Binding var showOnlyNearby: Bool
+
+    let nearbyCount: Int
+    let nearbyAvailableCount: Int
+    let isLocating: Bool
+    let locationMessage: String?
+    let onUseCurrentLocation: () -> Void
+
+    private var trimmedCity: String {
+        city.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Check Nearby Caregivers")
+                .font(.headline)
+
+            TextField("Enter your city", text: $city)
+                .textFieldStyle(.roundedBorder)
+
+            Button {
+                onUseCurrentLocation()
+            } label: {
+                HStack(spacing: 8) {
+                    if isLocating {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    }
+                    Label("Use Current Location", systemImage: "location.fill")
+                }
+            }
+            .buttonStyle(.bordered)
+            .tint(.green)
+            .disabled(isLocating)
+
+            if let locationMessage, !locationMessage.isEmpty {
+                // Permission failures stay non-blocking because manual city search still works.
+                Text(locationMessage)
+                    .font(.caption)
+                    .foregroundStyle(locationMessage.hasPrefix("Using") ? .green : .orange)
+            }
+
+            if trimmedCity.isEmpty {
+                Label("Enter a city to check nearby sitters.", systemImage: "location")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if nearbyCount == 0 {
+                Label("No caregivers found in \(trimmedCity).", systemImage: "location.slash")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            } else {
+                Label(
+                    "\(nearbyAvailableCount) of \(nearbyCount) caregiver\(nearbyCount == 1 ? "" : "s") available in \(trimmedCity).",
+                    systemImage: "location.fill"
+                )
+                .font(.caption)
+                .foregroundStyle(.green)
+            }
+
+            Toggle("Show nearby only", isOn: $showOnlyNearby)
+                .disabled(trimmedCity.isEmpty)
+        }
+        .padding(14)
+        .background(.green.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
     }
 }
 
@@ -141,7 +373,43 @@ private struct BecomeSitterView: View {
     @State private var isAvailable = true
     @State private var errorMessage: String?
 
+    private let initialName: String
+    private let initialLocation: String
+    private let initialBio: String
+    private let initialSpecialties: [String]
+    private let initialYearsExperience: Int?
+    private let initialPricePerDay: Double?
+    private let initialIsAvailable: Bool
+
     let onSave: (NewCaregiverInput) -> Void
+
+    init(
+        initialName: String = "",
+        initialLocation: String = "",
+        initialBio: String = "",
+        initialSpecialties: [String] = [],
+        initialYearsExperience: Int? = nil,
+        initialPricePerDay: Double? = nil,
+        initialIsAvailable: Bool = true,
+        onSave: @escaping (NewCaregiverInput) -> Void
+    ) {
+        self.initialName = initialName
+        self.initialLocation = initialLocation
+        self.initialBio = initialBio
+        self.initialSpecialties = initialSpecialties
+        self.initialYearsExperience = initialYearsExperience
+        self.initialPricePerDay = initialPricePerDay
+        self.initialIsAvailable = initialIsAvailable
+        self.onSave = onSave
+
+        _name = State(initialValue: initialName)
+        _location = State(initialValue: initialLocation)
+        _bio = State(initialValue: initialBio)
+        _specialtiesInput = State(initialValue: initialSpecialties.joined(separator: ", "))
+        _yearsExperience = State(initialValue: initialYearsExperience.map(String.init) ?? "")
+        _pricePerDay = State(initialValue: initialPricePerDay.map { String(Int($0)) } ?? "")
+        _isAvailable = State(initialValue: initialIsAvailable)
+    }
 
     var body: some View {
         NavigationStack {
@@ -172,6 +440,29 @@ private struct BecomeSitterView: View {
             }
             .navigationTitle("Become a Sitter")
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    name = initialName
+                }
+                if location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    location = initialLocation
+                }
+                if bio.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    bio = initialBio
+                }
+                if specialtiesInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    specialtiesInput = initialSpecialties.joined(separator: ", ")
+                }
+                if yearsExperience.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                   let initialYearsExperience {
+                    yearsExperience = String(initialYearsExperience)
+                }
+                if pricePerDay.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                   let initialPricePerDay {
+                    pricePerDay = String(Int(initialPricePerDay))
+                }
+                isAvailable = initialIsAvailable
+            }
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") { dismiss() }
@@ -258,8 +549,6 @@ struct CaregiverCard: View {
 
     var body: some View {
         HStack(spacing: 14) {
-
-            // Avatar with availability dot
             Circle()
                 .fill(caregiver.avatarColor.opacity(0.18))
                 .frame(width: 58, height: 58)
@@ -280,7 +569,7 @@ struct CaregiverCard: View {
                     Text(caregiver.name)
                         .font(.subheadline.weight(.semibold))
                     Spacer()
-                    Text("৳\(Int(caregiver.pricePerDay))/day")
+                    Text("BDT \(Int(caregiver.pricePerDay))/day")
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(.green)
                 }
@@ -294,7 +583,7 @@ struct CaregiverCard: View {
                     Text("(\(caregiver.reviewCount))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text("·")
+                    Text("|")
                         .foregroundStyle(.secondary)
                         .font(.caption)
                     Image(systemName: "mappin")
@@ -329,22 +618,33 @@ struct CaregiverCard: View {
 
 struct CaregiverDetailView: View {
     let caregiver: Caregiver
+    @ObservedObject var authViewModel: AuthViewModel
+    @StateObject private var dataStore = SupabaseDataStore()
 
+    @State private var plantName = ""
+    @State private var notes = ""
     @State private var startDate = Date()
     @State private var endDate = Calendar.current.date(byAdding: .day, value: 3, to: Date()) ?? Date()
     @State private var showBookingConfirm = false
     @State private var showBooked = false
+    @State private var isSavingBooking = false
+    @State private var bookingErrorMessage: String?
 
     private var nights: Int {
         max(1, Calendar.current.dateComponents([.day], from: startDate, to: endDate).day ?? 1)
     }
-    private var totalCost: Double { Double(nights) * caregiver.pricePerDay }
+
+    private var totalCost: Double {
+        Double(nights) * caregiver.pricePerDay
+    }
+
+    private var isSelfCaregiver: Bool {
+        authViewModel.session?.user.id == caregiver.id
+    }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
-
-                // ── Avatar hero ────────────────────────────────────────
                 VStack(spacing: 12) {
                     Circle()
                         .fill(caregiver.avatarColor.opacity(0.18))
@@ -357,7 +657,8 @@ struct CaregiverDetailView: View {
                     Text(caregiver.name)
                         .font(.title2.bold())
                     HStack(spacing: 4) {
-                        Image(systemName: "star.fill").foregroundStyle(.yellow)
+                        Image(systemName: "star.fill")
+                            .foregroundStyle(.yellow)
                         Text(String(format: "%.1f", caregiver.rating))
                             .fontWeight(.semibold)
                         Text("(\(caregiver.reviewCount) reviews)")
@@ -366,12 +667,11 @@ struct CaregiverDetailView: View {
                     .font(.subheadline)
                     HStack(spacing: 8) {
                         Label(caregiver.location, systemImage: "mappin")
-                        Text("·")
+                        Text("|")
                         Label("\(caregiver.yearsExperience) yrs exp.", systemImage: "leaf")
                     }
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    // Availability
                     HStack(spacing: 6) {
                         Circle()
                             .fill(caregiver.isAvailable ? .green : .gray)
@@ -385,11 +685,10 @@ struct CaregiverDetailView: View {
 
                 Divider().padding(.horizontal)
 
-                // ── Bio ────────────────────────────────────────────────
                 VStack(alignment: .leading, spacing: 8) {
                     Text("About")
                         .font(.headline)
-                    Text(caregiver.bio)
+                    Text(caregiver.bio.isEmpty ? "This caregiver has not added a bio yet." : caregiver.bio)
                         .font(.body)
                         .foregroundStyle(.secondary)
                         .lineSpacing(4)
@@ -397,7 +696,6 @@ struct CaregiverDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal)
 
-                // ── Specialties ────────────────────────────────────────
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Specialties")
                         .font(.headline)
@@ -417,7 +715,19 @@ struct CaregiverDetailView: View {
 
                 Divider().padding(.horizontal)
 
-                // ── Booking date picker ────────────────────────────────
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("Your Plants")
+                        .font(.headline)
+                    TextField("Plant name", text: $plantName)
+                        .textFieldStyle(.roundedBorder)
+                    TextField("Care notes (optional)", text: $notes, axis: .vertical)
+                        .textFieldStyle(.roundedBorder)
+                        .lineLimit(3...5)
+                }
+                .padding(.horizontal)
+
+                Divider().padding(.horizontal)
+
                 VStack(alignment: .leading, spacing: 14) {
                     Text("Book a Stay")
                         .font(.headline)
@@ -426,19 +736,18 @@ struct CaregiverDetailView: View {
                 }
                 .padding(.horizontal)
 
-                // ── Cost summary ───────────────────────────────────────
                 VStack(spacing: 10) {
                     HStack {
-                        Text("৳\(Int(caregiver.pricePerDay)) × \(nights) day\(nights == 1 ? "" : "s")")
+                        Text("BDT \(Int(caregiver.pricePerDay)) x \(nights) day\(nights == 1 ? "" : "s")")
                         Spacer()
-                        Text("৳\(Int(totalCost))")
+                        Text("BDT \(Int(totalCost))")
                     }
                     .font(.subheadline)
                     Divider()
                     HStack {
                         Text("Total").fontWeight(.semibold)
                         Spacer()
-                        Text("৳\(Int(totalCost))")
+                        Text("BDT \(Int(totalCost))")
                             .fontWeight(.bold)
                             .foregroundStyle(.green)
                     }
@@ -447,34 +756,188 @@ struct CaregiverDetailView: View {
                 .background(.green.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
                 .padding(.horizontal)
 
-                // ── Book button ────────────────────────────────────────
                 Button {
-                    if caregiver.isAvailable { showBookingConfirm = true }
+                    startBookingFlow()
                 } label: {
-                    Text(caregiver.isAvailable ? "Confirm Booking" : "Unavailable")
-                        .fontWeight(.semibold)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 4)
+                    HStack(spacing: 8) {
+                        if isSavingBooking {
+                            ProgressView()
+                                .tint(.white)
+                                .scaleEffect(0.85)
+                        }
+                        Text(isSelfCaregiver ? "Your Sitter Profile" : (caregiver.isAvailable ? "Confirm Booking" : "Unavailable"))
+                            .fontWeight(.semibold)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 4)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(caregiver.isAvailable ? .green : .gray)
-                .disabled(!caregiver.isAvailable)
+                .tint(caregiver.isAvailable && !isSelfCaregiver ? .green : .gray)
+                .disabled(!caregiver.isAvailable || isSavingBooking || isSelfCaregiver)
                 .padding(.horizontal)
                 .padding(.bottom, 24)
             }
         }
         .navigationTitle("Caregiver Profile")
         .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: startDate) { newValue in
+            if endDate < newValue {
+                endDate = newValue
+            }
+        }
         .confirmationDialog("Confirm Booking", isPresented: $showBookingConfirm, titleVisibility: .visible) {
-            Button("Book for ৳\(Int(totalCost))") { showBooked = true }
+            Button("Book for BDT \(Int(totalCost))") {
+                Task { await confirmBooking() }
+            }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Book \(caregiver.name) from \(startDate.formatted(date: .abbreviated, time: .omitted)) to \(endDate.formatted(date: .abbreviated, time: .omitted))?")
         }
-        .alert("Booking Confirmed! 🌿", isPresented: $showBooked) {
+        .alert("Plant Sitting", isPresented: Binding(
+            get: { bookingErrorMessage != nil },
+            set: { if !$0 { bookingErrorMessage = nil } }
+        )) {
+            Button("OK") { bookingErrorMessage = nil }
+        } message: {
+            Text(bookingErrorMessage ?? "")
+        }
+        .alert("Booking Confirmed", isPresented: $showBooked) {
             Button("Great!") {}
         } message: {
-            Text("\(caregiver.name) will care for your plants. You will receive a confirmation shortly.")
+            Text("Your booking request for \(caregiver.name) was saved. Track its status in Profile > My Bookings.")
         }
+    }
+
+    private func startBookingFlow() {
+        guard caregiver.isAvailable else { return }
+        guard !isSelfCaregiver else {
+            bookingErrorMessage = "You cannot book yourself as a sitter."
+            return
+        }
+        guard authViewModel.session != nil else {
+            bookingErrorMessage = "Please sign in first."
+            return
+        }
+        guard !plantName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            bookingErrorMessage = "Please enter your plant name before booking."
+            return
+        }
+
+        showBookingConfirm = true
+    }
+
+    private func confirmBooking() async {
+        isSavingBooking = true
+        defer { isSavingBooking = false }
+
+        do {
+            try await dataStore.createBooking(
+                NewBookingInput(
+                    caregiverID: caregiver.id,
+                    plantName: plantName,
+                    notes: notes,
+                    startDate: startDate,
+                    endDate: endDate,
+                    totalPrice: totalCost
+                ),
+                session: authViewModel.session
+            )
+            plantName = ""
+            notes = ""
+            showBooked = true
+        } catch {
+            bookingErrorMessage = error.localizedDescription
+        }
+    }
+}
+
+private final class NearbyLocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
+    @Published var detectedCity: String?
+    @Published var locationMessage: String?
+    @Published var isLocating = false
+
+    private let manager = CLLocationManager()
+    private let geocoder = CLGeocoder()
+
+    override init() {
+        super.init()
+        manager.delegate = self
+        manager.desiredAccuracy = kCLLocationAccuracyKilometer
+    }
+
+    func requestCurrentCity() {
+        locationMessage = nil
+
+        switch manager.authorizationStatus {
+        case .notDetermined:
+            isLocating = true
+            manager.requestWhenInUseAuthorization()
+        case .authorizedAlways, .authorizedWhenInUse:
+            requestLocation()
+        case .denied, .restricted:
+            isLocating = false
+            locationMessage = "Location permission is off. You can still type your city manually."
+        @unknown default:
+            isLocating = false
+            locationMessage = "Could not check location permission. Please type your city manually."
+        }
+    }
+
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        switch manager.authorizationStatus {
+        case .authorizedAlways, .authorizedWhenInUse:
+            requestLocation()
+        case .denied, .restricted:
+            isLocating = false
+            locationMessage = "Location permission is off. You can still type your city manually."
+        case .notDetermined:
+            break
+        @unknown default:
+            isLocating = false
+            locationMessage = "Could not check location permission. Please type your city manually."
+        }
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard let location = locations.last else {
+            isLocating = false
+            locationMessage = "Could not detect your location. Please type your city manually."
+            return
+        }
+
+        geocoder.reverseGeocodeLocation(location) { [weak self] placemarks, error in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.isLocating = false
+
+                if error != nil {
+                    self.locationMessage = "Could not read your city from location. Please type it manually."
+                    return
+                }
+
+                let placemark = placemarks?.first
+                let city = placemark?.locality
+                    ?? placemark?.subAdministrativeArea
+                    ?? placemark?.administrativeArea
+
+                guard let city, !city.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    self.locationMessage = "Could not detect your city. Please type it manually."
+                    return
+                }
+
+                self.detectedCity = city
+                self.locationMessage = "Using your current city: \(city)."
+            }
+        }
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        isLocating = false
+        locationMessage = "Could not detect your location. Please type your city manually."
+    }
+
+    private func requestLocation() {
+        isLocating = true
+        manager.requestLocation()
     }
 }

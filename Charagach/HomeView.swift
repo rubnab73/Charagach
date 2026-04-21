@@ -11,6 +11,13 @@ import SwiftUI
 struct HomeView: View {
     @ObservedObject var authViewModel: AuthViewModel
 
+    private var plantSittingTabIcon: String {
+        if #available(iOS 17.0, *) {
+            return "hands.and.sparkles.fill"
+        }
+        return "leaf.circle.fill"
+    }
+
     var body: some View {
         TabView {
             MarketplaceView(authViewModel: authViewModel)
@@ -20,7 +27,7 @@ struct HomeView: View {
 
             PlantSittingView(authViewModel: authViewModel)
                 .tabItem {
-                    Label("Plant Sitting", systemImage: "hands.and.sparkles.fill")
+                    Label("Plant Sitting", systemImage: plantSittingTabIcon)
                 }
 
             PlantCareView()

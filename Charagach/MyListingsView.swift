@@ -6,7 +6,9 @@
 //
 
 import SwiftUI
+import PhotosUI
 import Supabase
+import UIKit
 
 struct MyListingsView: View {
     @ObservedObject var authViewModel: AuthViewModel
@@ -214,7 +216,17 @@ private struct EditListingSheet: View {
     @State private var description = ""
     @State private var category: PlantCategory = .indoor
     @State private var condition: PlantCondition = .good
+    @State private var existingImageURLs: [String] = []
+    @State private var selectedPhotoItems: [PhotosPickerItem] = []
+    @State private var selectedImageData: [Data] = []
+    @State private var showCamera = false
+    @State private var didLoadListing = false
     @State private var errorMessage: String?
+
+    private let maxImageCount = 5
+    private var maxNewImageCount: Int {
+        max(0, maxImageCount - existingImageURLs.count)
+    }
 
     var body: some View {
         NavigationStack {
@@ -247,6 +259,41 @@ private struct EditListingSheet: View {
                         .lineLimit(4...7)
                 }
 
+                Section("Pictures") {
+                    if existingImageURLs.isEmpty && selectedImageData.isEmpty {
+                        Text("No pictures added yet.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if !existingImageURLs.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Current pictures")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 10) {
+                                    ForEach(Array(existingImageURLs.enumerated()), id: \.offset) { index, imageURL in
+                                        ExistingListingImageThumb(imageURL: imageURL) {
+                                            existingImageURLs.remove(at: index)
+                                            selectedPhotoItems = []
+                                        }
+                                    }
+                                }
+                                .padding(.vertical, 2)
+                            }
+                        }
+                    }
+
+                    ListingImagePickerControls(
+                        selectedPhotoItems: $selectedPhotoItems,
+                        selectedImageData: $selectedImageData,
+                        showCamera: $showCamera,
+                        errorMessage: $errorMessage,
+                        maxImageCount: maxNewImageCount
+                    )
+                }
+
                 if let errorMessage {
                     Section {
                         Text(errorMessage)
@@ -269,6 +316,8 @@ private struct EditListingSheet: View {
                 }
             }
             .onAppear {
+                guard !didLoadListing else { return }
+                didLoadListing = true
                 name = listing.name
                 species = listing.species
                 price = String(Int(listing.price))
@@ -277,6 +326,15 @@ private struct EditListingSheet: View {
                 description = listing.description
                 category = listing.category
                 condition = listing.condition
+                existingImageURLs = listing.imageURLs
+            }
+            .onChange(of: selectedPhotoItems) { newItems in
+                Task { await loadSelectedPhotos(newItems) }
+            }
+            .sheet(isPresented: $showCamera) {
+                CameraImagePicker { image in
+                    addCameraImage(image)
+                }
             }
         }
     }
@@ -313,10 +371,39 @@ private struct EditListingSheet: View {
             condition: condition,
             city: city,
             phoneNumber: phone,
-            description: description
+            description: description,
+            existingImageURLs: existingImageURLs,
+            newImageData: selectedImageData
         )
 
         onSave(input)
         dismiss()
+    }
+
+    private func loadSelectedPhotos(_ items: [PhotosPickerItem]) async {
+        var loadedImages = selectedImageData
+        for item in items.prefix(maxNewImageCount) {
+            guard loadedImages.count < maxNewImageCount else { break }
+            if let data = try? await item.loadTransferable(type: Data.self) {
+                loadedImages.append(data)
+            }
+        }
+
+        selectedImageData = loadedImages
+        selectedPhotoItems = []
+    }
+
+    private func addCameraImage(_ image: UIImage) {
+        guard selectedImageData.count < maxNewImageCount else {
+            errorMessage = "You can keep up to \(maxImageCount) pictures per listing."
+            return
+        }
+
+        guard let data = image.jpegData(compressionQuality: 0.85) else {
+            errorMessage = "Could not read the camera image."
+            return
+        }
+
+        selectedImageData.append(data)
     }
 }

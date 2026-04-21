@@ -9,18 +9,18 @@ import SwiftUI
 import Supabase
 import PhotosUI
 import UIKit
+import UserNotifications
 
 // MARK: - Profile Tab
 
 struct ProfileView: View {
     @ObservedObject var authViewModel: AuthViewModel
     @StateObject private var viewModel = ProfileViewModel()
+    @Environment(\.openURL) private var openURL
 
     @State private var showSignOutConfirm = false
     @State private var showEditProfile = false
     @State private var showMyListings = false
-    @State private var showComingSoon = false
-    @State private var comingSoonText = ""
     @State private var showProfileError = false
     @State private var profileErrorText = ""
 
@@ -85,11 +85,14 @@ struct ProfileView: View {
                             ProfileMenuItem(icon: "tag.fill", iconColor: .green, label: "My Listings") {
                                 showMyListings = true
                             }
-                            ProfileMenuItem(icon: "calendar.badge.checkmark", iconColor: .blue, label: "My Bookings") {
-                                showPlaceholder("Your booking history screen will be here.")
+                            ProfileMenuNavigationItem(icon: "calendar.badge.checkmark", iconColor: .blue, label: "My Bookings") {
+                                ProfileBookingsView(authViewModel: authViewModel)
                             }
-                            ProfileMenuItem(icon: "star.fill", iconColor: .yellow, label: "My Reviews", showDivider: false) {
-                                showPlaceholder("Your reviews screen will be here.")
+                            ProfileMenuNavigationItem(icon: "star.fill", iconColor: .yellow, label: "My Reviews") {
+                                ProfileReviewsView(authViewModel: authViewModel)
+                            }
+                            ProfileMenuNavigationItem(icon: "alarm.fill", iconColor: .mint, label: "Care Reminders", showDivider: false) {
+                                CareRemindersView()
                             }
                         }
 
@@ -97,20 +100,20 @@ struct ProfileView: View {
                             ProfileMenuItem(icon: "person.fill", iconColor: .purple, label: "Edit Profile") {
                                 showEditProfile = true
                             }
-                            ProfileMenuItem(icon: "bell.fill", iconColor: .orange, label: "Notifications") {
-                                showPlaceholder("Notifications settings will be here.")
+                            ProfileMenuNavigationItem(icon: "bell.fill", iconColor: .orange, label: "Notifications") {
+                                NotificationsSettingsView()
                             }
-                            ProfileMenuItem(icon: "lock.fill", iconColor: .gray, label: "Privacy & Security", showDivider: false) {
-                                showPlaceholder("Privacy and security settings will be here.")
+                            ProfileMenuNavigationItem(icon: "lock.fill", iconColor: .gray, label: "Privacy & Security", showDivider: false) {
+                                PrivacySecurityView(authViewModel: authViewModel, userEmail: userEmail)
                             }
                         }
 
                         ProfileMenuSection(title: "Support") {
-                            ProfileMenuItem(icon: "questionmark.circle.fill", iconColor: .teal, label: "Help Center") {
-                                showPlaceholder("Help Center will be available soon.")
+                            ProfileMenuNavigationItem(icon: "questionmark.circle.fill", iconColor: .teal, label: "Help Center") {
+                                HelpCenterView()
                             }
                             ProfileMenuItem(icon: "envelope.fill", iconColor: .indigo, label: "Contact Us", showDivider: false) {
-                                showPlaceholder("Email us at support@charagach.app")
+                                openSupportEmail()
                             }
                         }
                     }
@@ -162,16 +165,22 @@ struct ProfileView: View {
         } message: {
             Text(profileErrorText)
         }
-        .alert("Coming Soon", isPresented: $showComingSoon) {
-            Button("OK") {}
-        } message: {
-            Text(comingSoonText)
-        }
     }
 
-    private func showPlaceholder(_ message: String) {
-        comingSoonText = message
-        showComingSoon = true
+    private func openSupportEmail() {
+        guard let url = URL(string: "mailto:support@charagach.app") else {
+            profileErrorText = "Could not open the support email address."
+            showProfileError = true
+            return
+        }
+
+        // Keep the support button from failing silently when no mail app is configured.
+        openURL(url) { accepted in
+            if !accepted {
+                profileErrorText = "This device cannot open an email app right now."
+                showProfileError = true
+            }
+        }
     }
 }
 
@@ -219,6 +228,34 @@ private struct ProfileMenuSection<Content: View>: View {
 
 // MARK: - Profile Menu Item
 
+private struct ProfileMenuRowLabel: View {
+    let icon: String
+    let iconColor: Color
+    let label: String
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(iconColor.opacity(0.15))
+                    .frame(width: 34, height: 34)
+                Image(systemName: icon)
+                    .font(.system(size: 15))
+                    .foregroundStyle(iconColor)
+            }
+            Text(label)
+                .font(.body)
+                .foregroundStyle(.primary)
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+}
+
 private struct ProfileMenuItem: View {
     let icon: String
     let iconColor: Color
@@ -230,25 +267,38 @@ private struct ProfileMenuItem: View {
         Button {
             action()
         } label: {
-            HStack(spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(iconColor.opacity(0.15))
-                        .frame(width: 34, height: 34)
-                    Image(systemName: icon)
-                        .font(.system(size: 15))
-                        .foregroundStyle(iconColor)
-                }
-                Text(label)
-                    .font(.body)
-                    .foregroundStyle(.primary)
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            ProfileMenuRowLabel(icon: icon, iconColor: iconColor, label: label)
+        }
+        if showDivider {
+            Divider().padding(.leading, 64)
+        }
+    }
+}
+
+private struct ProfileMenuNavigationItem<Destination: View>: View {
+    let icon: String
+    let iconColor: Color
+    let label: String
+    var showDivider: Bool = true
+    let destination: Destination
+
+    init(
+        icon: String,
+        iconColor: Color,
+        label: String,
+        showDivider: Bool = true,
+        @ViewBuilder destination: () -> Destination
+    ) {
+        self.icon = icon
+        self.iconColor = iconColor
+        self.label = label
+        self.showDivider = showDivider
+        self.destination = destination()
+    }
+
+    var body: some View {
+        NavigationLink(destination: destination) {
+            ProfileMenuRowLabel(icon: icon, iconColor: iconColor, label: label)
         }
         if showDivider {
             Divider().padding(.leading, 64)
@@ -300,6 +350,14 @@ private struct EditProfileView: View {
                         }
                     }
                     Toggle("I also provide plant sitting", isOn: $viewModel.isCaregiver)
+                    if viewModel.isCaregiver {
+                        Label(
+                            "Complete the Become a Sitter form from the Plant Sitting tab to add your rate, specialties, bio, and availability.",
+                            systemImage: "info.circle"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
                 }
             }
             .navigationTitle("Edit Profile")
@@ -434,5 +492,1187 @@ private struct EditableAvatarView: View {
                     .font(.headline.weight(.bold))
                     .foregroundStyle(.green)
             }
+    }
+}
+
+// MARK: - Bookings
+
+private struct ProfileBookingsView: View {
+    @ObservedObject var authViewModel: AuthViewModel
+    @StateObject private var dataStore = SupabaseDataStore()
+
+    @State private var bookings: [PlantSittingBooking] = []
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+    @State private var selectedFilter = BookingListFilter.all
+    @State private var reviewedBookingIDs: Set<UUID> = []
+    @State private var selectedReviewTarget: ReviewSheetTarget?
+
+    private var currentUserID: UUID? {
+        authViewModel.session?.user.id
+    }
+
+    private var filteredBookings: [PlantSittingBooking] {
+        guard let currentUserID else { return bookings }
+
+        switch selectedFilter {
+        case .all:
+            return bookings
+        case .owner:
+            return bookings.filter { $0.role(for: currentUserID) == .owner }
+        case .caregiver:
+            return bookings.filter { $0.role(for: currentUserID) == .caregiver }
+        }
+    }
+
+    private var showsFilter: Bool {
+        guard let currentUserID else { return false }
+        let hasOwnerBookings = bookings.contains { $0.role(for: currentUserID) == .owner }
+        let hasCaregiverBookings = bookings.contains { $0.role(for: currentUserID) == .caregiver }
+        return hasOwnerBookings && hasCaregiverBookings
+    }
+
+    var body: some View {
+        Group {
+            if isLoading {
+                ProgressView("Loading bookings...")
+                    .tint(.green)
+            } else if filteredBookings.isEmpty {
+                ProfileEmptyState(
+                    icon: "calendar.badge.exclamationmark",
+                    title: "No Bookings Yet",
+                    message: "Bookings you make or manage will appear here."
+                )
+            } else {
+                List {
+                    if showsFilter {
+                        Section {
+                            Picker("Booking View", selection: $selectedFilter) {
+                                ForEach(BookingListFilter.allCases) { filter in
+                                    Text(filter.rawValue).tag(filter)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                        }
+                    }
+
+                    ForEach(filteredBookings) { booking in
+                        if let currentUserID {
+                            BookingRow(
+                                booking: booking,
+                                currentUserID: currentUserID,
+                                canLeaveReview: shouldShowOwnerReviewAction(for: booking, currentUserID: currentUserID),
+                                onStatusChange: { status in
+                                    Task { await updateStatus(bookingID: booking.id, status: status) }
+                                },
+                                onLeaveReview: {
+                                    selectedReviewTarget = .booking(booking)
+                                }
+                            )
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                        }
+                    }
+                }
+                .listStyle(.plain)
+                .refreshable {
+                    await refresh()
+                }
+            }
+        }
+        .navigationTitle("My Bookings")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    Task { await refresh() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+            }
+        }
+        .task {
+            await refresh()
+        }
+        .sheet(item: $selectedReviewTarget) { target in
+            LeaveReviewSheet(authViewModel: authViewModel, target: target) {
+                await refresh()
+            }
+        }
+        .alert("Bookings", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("OK") { errorMessage = nil }
+        } message: {
+            Text(errorMessage ?? "")
+        }
+    }
+
+    private func refresh() async {
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            bookings = try await dataStore.loadMyBookings(session: authViewModel.session)
+            do {
+                let reviewCenter = try await dataStore.loadReviewCenter(session: authViewModel.session)
+                reviewedBookingIDs = Set(reviewCenter.given.map(\.bookingID))
+            } catch {
+                // Keep booking list usable even if review center is not available.
+                reviewedBookingIDs = []
+            }
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func shouldShowOwnerReviewAction(for booking: PlantSittingBooking, currentUserID: UUID) -> Bool {
+        booking.role(for: currentUserID) == .owner
+            && booking.status == .completed
+            && !reviewedBookingIDs.contains(booking.id)
+    }
+
+    private func updateStatus(bookingID: UUID, status: BookingStatus) async {
+        do {
+            try await dataStore.updateBookingStatus(bookingID: bookingID, status: status, session: authViewModel.session)
+            await refresh()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+private enum BookingListFilter: String, CaseIterable, Identifiable {
+    case all = "All"
+    case owner = "As Owner"
+    case caregiver = "As Caregiver"
+
+    var id: String { rawValue }
+}
+
+private struct BookingRow: View {
+    let booking: PlantSittingBooking
+    let currentUserID: UUID
+    let canLeaveReview: Bool
+    let onStatusChange: (BookingStatus) -> Void
+    let onLeaveReview: () -> Void
+
+    private var role: BookingRole {
+        booking.role(for: currentUserID) ?? .owner
+    }
+
+    private var counterpartLabel: String {
+        role == .owner ? "Caregiver" : "Owner"
+    }
+
+    private var actionStatus: BookingStatus? {
+        switch (role, booking.status) {
+        case (.owner, .pending): return .cancelled
+        case (.caregiver, .pending): return .confirmed
+        case (.caregiver, .confirmed): return .completed
+        default: return nil
+        }
+    }
+
+    private var actionTitle: String {
+        switch actionStatus {
+        case .cancelled:
+            return "Cancel Booking"
+        case .confirmed:
+            return "Confirm Booking"
+        case .completed:
+            return "Mark Completed"
+        default:
+            return ""
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(booking.displayPlantName)
+                        .font(.headline)
+                    Text("\(counterpartLabel): \(booking.counterpartName(for: currentUserID))")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                BookingStatusBadge(status: booking.status)
+            }
+
+            HStack(spacing: 10) {
+                Label(role.rawValue, systemImage: role == .owner ? "person.fill" : "hands.sparkles.fill")
+                Label(
+                    "\(booking.startDate.formatted(date: .abbreviated, time: .omitted)) - \(booking.endDate.formatted(date: .abbreviated, time: .omitted))",
+                    systemImage: "calendar"
+                )
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            if !booking.notes.isEmpty {
+                Text(booking.notes)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack {
+                Text("Total")
+                    .font(.subheadline.weight(.medium))
+                Spacer()
+                Text("BDT \(Int(booking.totalPrice))")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.green)
+            }
+
+            if let actionStatus {
+                Button(actionTitle, role: actionStatus == .cancelled ? .destructive : nil) {
+                    onStatusChange(actionStatus)
+                }
+                .buttonStyle(.bordered)
+            }
+
+            if canLeaveReview {
+                Button("Owner Complete & Rate Sitter") {
+                    onLeaveReview()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.green)
+            }
+        }
+        .padding(16)
+        .background(.background, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(.green.opacity(0.08), lineWidth: 1)
+        )
+    }
+}
+
+private struct BookingStatusBadge: View {
+    let status: BookingStatus
+
+    var body: some View {
+        Text(status.title)
+            .font(.caption.weight(.semibold))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(status.color.opacity(0.12), in: Capsule())
+            .foregroundStyle(status.color)
+    }
+}
+
+// MARK: - Reviews
+
+private enum ReviewSheetTarget: Identifiable {
+    case booking(PlantSittingBooking)
+    case review(CaregiverReviewEntry)
+
+    var id: UUID {
+        switch self {
+        case .booking(let booking): return booking.id
+        case .review(let review): return review.id
+        }
+    }
+}
+
+private struct ProfileReviewsView: View {
+    @ObservedObject var authViewModel: AuthViewModel
+    @StateObject private var dataStore = SupabaseDataStore()
+
+    @State private var reviewCenter = ReviewCenterData.empty
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+    @State private var selectedReviewTarget: ReviewSheetTarget?
+
+    var body: some View {
+        ScrollView {
+            if isLoading {
+                ProgressView("Loading reviews...")
+                    .tint(.green)
+                    .padding(.top, 40)
+            } else if reviewCenter.receivedSummaryCount == 0 &&
+                        reviewCenter.pending.isEmpty &&
+                        reviewCenter.received.isEmpty &&
+                        reviewCenter.given.isEmpty {
+                ProfileEmptyState(
+                    icon: "star.bubble",
+                    title: "No Reviews Yet",
+                    message: "Completed bookings and received feedback will appear here."
+                )
+                .padding(.top, 40)
+            } else {
+                VStack(alignment: .leading, spacing: 20) {
+                    if reviewCenter.receivedSummaryCount > 0 {
+                        ReviewSummaryCard(
+                            averageRating: reviewCenter.receivedSummaryRating,
+                            reviewCount: reviewCenter.receivedSummaryCount
+                        )
+                    }
+
+                    if !reviewCenter.pending.isEmpty {
+                        ReviewSection(title: "Pending Feedback") {
+                            ForEach(reviewCenter.pending) { booking in
+                                PendingReviewCard(booking: booking) {
+                                    selectedReviewTarget = .booking(booking)
+                                }
+                            }
+                        }
+                    }
+
+                    if !reviewCenter.received.isEmpty {
+                        ReviewSection(title: "Reviews You Received") {
+                            ForEach(reviewCenter.received) { review in
+                                ReviewRow(
+                                    title: review.reviewerName,
+                                    subtitle: review.plantName.isEmpty ? "Plant sitting review" : review.plantName,
+                                    rating: review.rating,
+                                    comment: review.comment,
+                                    date: review.createdAt
+                                )
+                            }
+                        }
+                    }
+
+                    if !reviewCenter.given.isEmpty {
+                        ReviewSection(title: "Reviews You Wrote") {
+                            ForEach(reviewCenter.given) { review in
+                                ReviewRow(
+                                    title: review.caregiverName,
+                                    subtitle: review.plantName.isEmpty ? "Plant sitting review" : review.plantName,
+                                    rating: review.rating,
+                                    comment: review.comment,
+                                    date: review.createdAt,
+                                    actionTitle: "Edit Review",
+                                    action: {
+                                        selectedReviewTarget = .review(review)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+                .padding()
+            }
+        }
+        .navigationTitle("My Reviews")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    Task { await refresh() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+            }
+        }
+        .task {
+            await refresh()
+        }
+        .refreshable {
+            await refresh()
+        }
+        .sheet(item: $selectedReviewTarget) { target in
+            LeaveReviewSheet(authViewModel: authViewModel, target: target) {
+                await refresh()
+            }
+        }
+        .alert("Reviews", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("OK") { errorMessage = nil }
+        } message: {
+            Text(errorMessage ?? "")
+        }
+    }
+
+    private func refresh() async {
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            reviewCenter = try await dataStore.loadReviewCenter(session: authViewModel.session)
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+private struct ReviewSummaryCard: View {
+    let averageRating: Double
+    let reviewCount: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Your Caregiver Rating")
+                .font(.headline)
+            HStack(alignment: .lastTextBaseline, spacing: 12) {
+                Text(String(format: "%.1f", averageRating))
+                    .font(.system(size: 36, weight: .bold))
+                    .foregroundStyle(.green)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 4) {
+                        ForEach(0..<5, id: \.self) { index in
+                            Image(systemName: Double(index) < averageRating.rounded() ? "star.fill" : "star")
+                                .foregroundStyle(.yellow)
+                        }
+                    }
+                    Text("\(reviewCount) total review\(reviewCount == 1 ? "" : "s")")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(18)
+        .background(.green.opacity(0.08), in: RoundedRectangle(cornerRadius: 18))
+    }
+}
+
+private struct ReviewSection<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.headline)
+            content
+        }
+    }
+}
+
+private struct PendingReviewCard: View {
+    let booking: PlantSittingBooking
+    let onReview: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(booking.displayPlantName)
+                .font(.headline)
+            Text("Caregiver: \(booking.caregiverName)")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Text("\(booking.startDate.formatted(date: .abbreviated, time: .omitted)) - \(booking.endDate.formatted(date: .abbreviated, time: .omitted))")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Button("Leave Review") {
+                onReview()
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.green)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(.background, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(.green.opacity(0.08), lineWidth: 1)
+        )
+    }
+}
+
+private struct ReviewRow: View {
+    let title: String
+    let subtitle: String
+    let rating: Double
+    let comment: String
+    let date: Date?
+    var actionTitle: String? = nil
+    var action: (() -> Void)? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.headline)
+                    Text(subtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: 4) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "star.fill")
+                            .foregroundStyle(.yellow)
+                        Text(String(format: "%.1f", rating))
+                            .fontWeight(.semibold)
+                    }
+                    if let date {
+                        Text(date.formatted(date: .abbreviated, time: .omitted))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            Text(comment.isEmpty ? "No written comment." : comment)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            if let actionTitle, let action {
+                Button(actionTitle) {
+                    action()
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(.background, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(.green.opacity(0.08), lineWidth: 1)
+        )
+    }
+}
+
+private struct LeaveReviewSheet: View {
+    @ObservedObject var authViewModel: AuthViewModel
+    @StateObject private var dataStore = SupabaseDataStore()
+    @Environment(\.dismiss) private var dismiss
+
+    let bookingID: UUID
+    let caregiverID: UUID
+    let plantTitle: String
+    let caregiverName: String
+    let onSubmitted: () async -> Void
+
+    @State private var rating: Int
+    @State private var comment: String
+    @State private var isSaving = false
+    @State private var errorMessage: String?
+
+    init(authViewModel: AuthViewModel, target: ReviewSheetTarget, onSubmitted: @escaping () async -> Void) {
+        _authViewModel = ObservedObject(wrappedValue: authViewModel)
+        self.onSubmitted = onSubmitted
+
+        switch target {
+        case .booking(let booking):
+            self.bookingID = booking.id
+            self.caregiverID = booking.caregiverID
+            self.plantTitle = booking.displayPlantName
+            self.caregiverName = booking.caregiverName
+            _rating = State(initialValue: 5)
+            _comment = State(initialValue: "")
+        case .review(let review):
+            self.bookingID = review.bookingID
+            self.caregiverID = review.caregiverID
+            self.plantTitle = review.plantName.isEmpty ? "Plant sitting review" : review.plantName
+            self.caregiverName = review.caregiverName
+            // Load the saved rating/comment so edits reflect the actual persisted review.
+            _rating = State(initialValue: min(5, max(1, Int(review.rating.rounded()))))
+            _comment = State(initialValue: review.comment)
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Booking") {
+                    Text(plantTitle)
+                    Text(caregiverName)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section("Rating") {
+                    HStack {
+                        Spacer()
+                        ForEach(1...5, id: \.self) { star in
+                            Button {
+                                rating = star
+                            } label: {
+                                Image(systemName: star <= rating ? "star.fill" : "star")
+                                    .font(.title2)
+                                    .foregroundStyle(.yellow)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        Spacer()
+                    }
+                }
+
+                Section("Comment") {
+                    TextField("Share your experience", text: $comment, axis: .vertical)
+                        .lineLimit(4...7)
+                }
+
+                if let errorMessage {
+                    Section {
+                        Text(errorMessage)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
+            .navigationTitle("Leave Review")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Submit") {
+                        Task { await submitReview() }
+                    }
+                    .fontWeight(.semibold)
+                    .disabled(isSaving)
+                }
+            }
+        }
+    }
+
+    private func submitReview() async {
+        isSaving = true
+        defer { isSaving = false }
+
+        do {
+            try await dataStore.submitReview(
+                NewReviewInput(
+                    bookingID: bookingID,
+                    caregiverID: caregiverID,
+                    rating: rating,
+                    comment: comment
+                ),
+                session: authViewModel.session
+            )
+            await onSubmitted()
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+// MARK: - Care Reminders
+
+private struct CareRemindersView: View {
+    @AppStorage("notifications.care_reminders") private var reminderNotifications = true
+    @State private var reminders: [PlantCareReminder] = []
+    @State private var showAddReminder = false
+    @State private var statusMessage: String?
+
+    private var upcomingReminders: [PlantCareReminder] {
+        reminders
+            .filter { !$0.isCompleted }
+            .sorted { $0.dueDate < $1.dueDate }
+    }
+
+    private var completedReminders: [PlantCareReminder] {
+        reminders
+            .filter(\.isCompleted)
+            .sorted { $0.dueDate > $1.dueDate }
+    }
+
+    var body: some View {
+        Group {
+            if reminders.isEmpty {
+                ProfileEmptyState(
+                    icon: "alarm",
+                    title: "No Care Reminders",
+                    message: "Add watering, fertilizing, repotting, or pruning reminders for your plants."
+                )
+            } else {
+                List {
+                    if !upcomingReminders.isEmpty {
+                        Section("Upcoming") {
+                            ForEach(upcomingReminders) { reminder in
+                                CareReminderRow(reminder: reminder) {
+                                    markCompleted(reminder)
+                                }
+                                .swipeActions(edge: .trailing) {
+                                    Button(role: .destructive) {
+                                        delete(reminder)
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if !completedReminders.isEmpty {
+                        Section("Completed") {
+                            ForEach(completedReminders) { reminder in
+                                CareReminderRow(reminder: reminder, onComplete: nil)
+                                    .swipeActions(edge: .trailing) {
+                                        Button(role: .destructive) {
+                                            delete(reminder)
+                                        } label: {
+                                            Label("Delete", systemImage: "trash")
+                                        }
+                                    }
+                            }
+                        }
+                    }
+                }
+                .listStyle(.insetGrouped)
+            }
+        }
+        .navigationTitle("Care Reminders")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    showAddReminder = true
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .foregroundStyle(.green)
+                }
+            }
+        }
+        .onAppear {
+            reminders = PlantCareReminderStore.load()
+        }
+        .sheet(isPresented: $showAddReminder) {
+            AddCareReminderSheet { reminder in
+                add(reminder)
+            }
+        }
+        .alert("Care Reminders", isPresented: Binding(
+            get: { statusMessage != nil },
+            set: { if !$0 { statusMessage = nil } }
+        )) {
+            Button("OK") { statusMessage = nil }
+        } message: {
+            Text(statusMessage ?? "")
+        }
+    }
+
+    private func add(_ reminder: PlantCareReminder) {
+        reminders.append(reminder)
+        save()
+
+        Task {
+            await scheduleNotificationIfNeeded(for: reminder)
+        }
+    }
+
+    private func markCompleted(_ reminder: PlantCareReminder) {
+        guard let index = reminders.firstIndex(where: { $0.id == reminder.id }) else { return }
+        reminders[index].isCompleted = true
+        save()
+        cancelNotification(for: reminder)
+    }
+
+    private func delete(_ reminder: PlantCareReminder) {
+        reminders.removeAll { $0.id == reminder.id }
+        save()
+        cancelNotification(for: reminder)
+    }
+
+    private func save() {
+        PlantCareReminderStore.save(reminders)
+    }
+
+    @MainActor
+    private func scheduleNotificationIfNeeded(for reminder: PlantCareReminder) async {
+        guard reminderNotifications else {
+            statusMessage = "Reminder saved. Turn on care reminder notifications in Profile > Notifications if you want alerts."
+            return
+        }
+
+        guard reminder.dueDate > Date() else { return }
+
+        do {
+            let center = UNUserNotificationCenter.current()
+            let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
+
+            guard granted else {
+                statusMessage = "Reminder saved. Notifications are off for Charagach, so no alert was scheduled."
+                return
+            }
+
+            let content = UNMutableNotificationContent()
+            content.title = "\(reminder.task.rawValue) \(reminder.plantName)"
+            content.body = reminder.notes.isEmpty ? "Time to care for your plant." : reminder.notes
+            content.sound = .default
+
+            let components = Calendar.current.dateComponents(
+                [.year, .month, .day, .hour, .minute],
+                from: reminder.dueDate
+            )
+            let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+            let request = UNNotificationRequest(
+                identifier: reminder.notificationID,
+                content: content,
+                trigger: trigger
+            )
+
+            try await center.add(request)
+        } catch {
+            statusMessage = "Reminder saved, but the notification could not be scheduled."
+        }
+    }
+
+    private func cancelNotification(for reminder: PlantCareReminder) {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [reminder.notificationID])
+    }
+}
+
+private enum PlantCareReminderStore {
+    private static let key = "care_reminders.items"
+
+    static func load() -> [PlantCareReminder] {
+        guard let data = UserDefaults.standard.data(forKey: key) else { return [] }
+        return (try? JSONDecoder().decode([PlantCareReminder].self, from: data)) ?? []
+    }
+
+    static func save(_ reminders: [PlantCareReminder]) {
+        guard let data = try? JSONEncoder().encode(reminders) else { return }
+        UserDefaults.standard.set(data, forKey: key)
+    }
+}
+
+private struct CareReminderRow: View {
+    let reminder: PlantCareReminder
+    let onComplete: (() -> Void)?
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(reminder.task.color.opacity(0.15))
+                    .frame(width: 42, height: 42)
+                Image(systemName: reminder.task.icon)
+                    .foregroundStyle(reminder.task.color)
+            }
+
+            VStack(alignment: .leading, spacing: 5) {
+                HStack {
+                    Text(reminder.plantName)
+                        .font(.headline)
+                    Spacer()
+                    TagView(text: reminder.task.rawValue, color: reminder.task.color)
+                }
+
+                Text(reminder.dueDate.formatted(date: .abbreviated, time: .shortened))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                if !reminder.notes.isEmpty {
+                    Text(reminder.notes)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let onComplete {
+                    Button("Mark Complete") {
+                        onComplete()
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.green)
+                    .font(.caption)
+                    .padding(.top, 2)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+private struct AddCareReminderSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var plantName = ""
+    @State private var task: PlantCareReminderTask = .water
+    @State private var dueDate = Calendar.current.date(byAdding: .hour, value: 1, to: Date()) ?? Date()
+    @State private var notes = ""
+    @State private var errorMessage: String?
+
+    let onSave: (PlantCareReminder) -> Void
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Plant") {
+                    TextField("Plant name", text: $plantName)
+                    Picker("Task", selection: $task) {
+                        ForEach(PlantCareReminderTask.allCases) { task in
+                            Label(task.rawValue, systemImage: task.icon).tag(task)
+                        }
+                    }
+                }
+
+                Section("Reminder") {
+                    DatePicker(
+                        "Date & Time",
+                        selection: $dueDate,
+                        in: Date()...,
+                        displayedComponents: [.date, .hourAndMinute]
+                    )
+                    TextField("Notes (optional)", text: $notes, axis: .vertical)
+                        .lineLimit(3...5)
+                }
+
+                if let errorMessage {
+                    Section {
+                        Text(errorMessage)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
+            .navigationTitle("Add Reminder")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Save") {
+                        save()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+        }
+    }
+
+    private func save() {
+        let trimmedName = plantName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else {
+            errorMessage = "Please enter the plant name."
+            return
+        }
+
+        let reminder = PlantCareReminder(
+            plantName: trimmedName,
+            task: task,
+            dueDate: dueDate,
+            notes: notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+
+        onSave(reminder)
+        dismiss()
+    }
+}
+
+// MARK: - Notifications
+
+private struct NotificationsSettingsView: View {
+    @AppStorage("notifications.booking_updates") private var bookingUpdates = true
+    @AppStorage("notifications.review_activity") private var reviewActivity = true
+    @AppStorage("notifications.marketing") private var marketing = false
+    @AppStorage("notifications.daily_tips") private var dailyTips = true
+    @AppStorage("notifications.care_reminders") private var careReminders = true
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        Form {
+            Section("Alerts") {
+                Toggle("Booking updates", isOn: $bookingUpdates)
+                Toggle("Review activity", isOn: $reviewActivity)
+                Toggle("Daily care tips", isOn: $dailyTips)
+                Toggle("Care reminder alerts", isOn: $careReminders)
+                Toggle("Offers and announcements", isOn: $marketing)
+            }
+
+            Section("How These Work") {
+                Text("These preferences are stored on this device. Care reminder alerts use local iPhone notifications when permission is granted.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Text("Booking, review, and offer preferences are saved for future notification features; Charagach does not use a push notification backend yet.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("System") {
+                Button("Open App Notification Settings") {
+                    openSettings()
+                }
+                Text("Use your iPhone settings to manage system notification permission.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .navigationTitle("Notifications")
+    }
+
+    private func openSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        openURL(url)
+    }
+}
+
+// MARK: - Privacy & Security
+
+private struct PrivacySecurityView: View {
+    @ObservedObject var authViewModel: AuthViewModel
+    let userEmail: String
+    @Environment(\.openURL) private var openURL
+
+    @State private var statusMessage = ""
+    @State private var showStatusMessage = false
+
+    var body: some View {
+        Form {
+            Section("Account") {
+                LabeledContent("Email") {
+                    Text(userEmail)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Section("Security") {
+                Button("Send Password Reset Email") {
+                    Task { await sendPasswordReset() }
+                }
+                Button("Open App Settings") {
+                    openSettings()
+                }
+            }
+
+            Section("Privacy") {
+                Text("Your profile currently shows your name, avatar, city, listing counts, booking activity, and caregiver activity inside the app.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Text("If you need help with account privacy or data access, contact support from the Help Center.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .navigationTitle("Privacy & Security")
+        .onDisappear {
+            authViewModel.errorMessage = nil
+            authViewModel.successMessage = nil
+        }
+        .alert("Security", isPresented: $showStatusMessage) {
+            Button("OK") {}
+        } message: {
+            Text(statusMessage)
+        }
+    }
+
+    private func sendPasswordReset() async {
+        authViewModel.errorMessage = nil
+        authViewModel.successMessage = nil
+        await authViewModel.sendPasswordReset(email: userEmail)
+        statusMessage = authViewModel.errorMessage ?? authViewModel.successMessage ?? "Request finished."
+        showStatusMessage = true
+    }
+
+    private func openSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        openURL(url)
+    }
+}
+
+// MARK: - Help Center
+
+private struct HelpCenterView: View {
+    @Environment(\.openURL) private var openURL
+    @State private var supportErrorMessage: String?
+
+    private let faqs: [HelpFAQ] = [
+        HelpFAQ(
+            question: "How do bookings work?",
+            answer: "Choose a caregiver, enter your plant details, pick your dates, and confirm the booking. The caregiver can then confirm or complete it from their bookings list."
+        ),
+        HelpFAQ(
+            question: "How should I contact a seller safely?",
+            answer: "Use the phone or message option on the listing, confirm the plant condition, agree on a public handover place when possible, and avoid sending money before you are comfortable with the seller."
+        ),
+        HelpFAQ(
+            question: "Where can I manage my listings?",
+            answer: "Open Profile, then choose My Listings. From there you can edit posts, change status, or delete a listing."
+        ),
+        HelpFAQ(
+            question: "Can I change listing photos after posting?",
+            answer: "Yes. Open Profile, choose My Listings, edit the post, then remove old photos or add new ones before saving."
+        ),
+        HelpFAQ(
+            question: "How do reviews appear?",
+            answer: "After a completed booking, the plant owner can leave a review. Caregiver ratings are updated from those submitted reviews."
+        ),
+        HelpFAQ(
+            question: "How do care reminders work?",
+            answer: "Care reminders are saved on this device. If notification permission is enabled, Charagach can schedule local alerts for your plant tasks."
+        ),
+        HelpFAQ(
+            question: "How do I update my profile or sitter status?",
+            answer: "Use Edit Profile to update your personal details. To appear as a complete sitter, use Become a Sitter from the Plant Sitting tab and add your rate, bio, specialties, and availability."
+        )
+    ]
+
+    var body: some View {
+        List {
+            Section("Quick Help") {
+                Button("Email Support") {
+                    openSupportEmail()
+                }
+                Text("For marketplace, booking, profile, or reminder issues, send a short message with your account email and what happened.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Frequently Asked Questions") {
+                ForEach(faqs) { faq in
+                    DisclosureGroup(faq.question) {
+                        Text(faq.answer)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 4)
+                    }
+                }
+            }
+
+            Section("Need More Help?") {
+                Text("For account issues, booking questions, or profile problems, email support@charagach.app.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .navigationTitle("Help Center")
+        .alert("Help Center", isPresented: Binding(
+            get: { supportErrorMessage != nil },
+            set: { if !$0 { supportErrorMessage = nil } }
+        )) {
+            Button("OK") { supportErrorMessage = nil }
+        } message: {
+            Text(supportErrorMessage ?? "")
+        }
+    }
+
+    private func openSupportEmail() {
+        guard let url = URL(string: "mailto:support@charagach.app") else { return }
+        // Keep the support button from failing silently when no mail app is configured.
+        openURL(url) { accepted in
+            if !accepted {
+                supportErrorMessage = "This device cannot open an email app right now."
+            }
+        }
+    }
+}
+
+private struct HelpFAQ: Identifiable {
+    let id = UUID()
+    let question: String
+    let answer: String
+}
+
+// MARK: - Shared Empty State
+
+private struct ProfileEmptyState: View {
+    let icon: String
+    let title: String
+    let message: String
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 40))
+                .foregroundStyle(.secondary)
+            Text(title)
+                .font(.headline)
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(24)
     }
 }

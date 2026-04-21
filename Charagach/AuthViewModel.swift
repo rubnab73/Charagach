@@ -182,6 +182,10 @@ class AuthViewModel: ObservableObject {
             errorMessage = "Please enter a valid email address."
             return false
         }
+        guard !password.isEmpty else {
+            errorMessage = "Password cannot be empty."
+            return false
+        }
         return true
     }
 }

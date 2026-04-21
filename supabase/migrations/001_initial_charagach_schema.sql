@@ -45,7 +45,9 @@ create table if not exists public.plant_listings (
   condition text not null check (condition in ('Excellent', 'Good', 'Fair')),
   description text,
   city text,
+  phone_number text,
   image_url text,
+  image_urls text[] not null default '{}',
   status text not null default 'active' check (status in ('active', 'sold', 'archived')),
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
