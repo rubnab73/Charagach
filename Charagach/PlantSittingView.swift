@@ -113,7 +113,7 @@ struct PlantSittingView: View {
                                     .lineSpacing(2)
                             }
                             Spacer()
-                            Image(systemName: "hands.and.sparkles.fill")
+                            Image(systemName: "person.2.fill")
                                 .font(.system(size: 52))
                                 .foregroundStyle(.white.opacity(0.25))
                         }

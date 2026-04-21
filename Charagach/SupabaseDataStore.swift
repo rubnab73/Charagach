@@ -104,6 +104,7 @@ final class SupabaseDataStore: ObservableObject {
                     imageURLs: row.resolvedImageURLs,
                     iconName: Self.iconName(for: row.category),
                     iconColor: Self.iconColor(for: row.category),
+                    createdAt: Self.parseTimestamp(row.createdAt),
                     postedDaysAgo: Self.daysAgo(from: row.createdAt),
                     status: row.status
                 )
@@ -178,6 +179,7 @@ final class SupabaseDataStore: ObservableObject {
                 imageURLs: row.resolvedImageURLs,
                 iconName: Self.iconName(for: row.category),
                 iconColor: Self.iconColor(for: row.category),
+                createdAt: Self.parseTimestamp(row.createdAt),
                 postedDaysAgo: Self.daysAgo(from: row.createdAt),
                 status: row.status
             )
